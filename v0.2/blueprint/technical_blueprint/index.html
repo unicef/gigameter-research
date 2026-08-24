@@ -1,0 +1,2204 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Spatial Geofencing & Telemetry Analytics Platform">
+      
+      
+        <meta name="author" content="Utku Can Ozturk">
+      
+      
+        <link rel="canonical" href="https://unicef.github.io/gigameter-research/v0.2/blueprint/technical_blueprint/">
+      
+      
+        <link rel="prev" href="../../spatial/pillar-3-validation/">
+      
+      
+        <link rel="next" href="../../api/profiler/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.7">
+    
+    
+      
+        <title>Spatial & Geofencing Blueprint - Research Hub</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.8608ea7d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/cards.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#geofencing-technical-blueprint-research-methodology" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Research Hub" class="md-header__button md-logo" aria-label="Research Hub" data-md-component="logo">
+      
+  <img src="../../gigameter_white.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Research Hub
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Spatial & Geofencing Blueprint
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="deep-orange"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+    
+  
+  Welcome
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../spatial/pillar-1-mobility/" class="md-tabs__link">
+          
+  
+    
+  
+  Spatial & Geofencing
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../connectivity/outage-models/" class="md-tabs__link">
+          
+  
+    
+  
+  Outages & Connectivity
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../diagnostics/routing/" class="md-tabs__link">
+          
+  
+    
+  
+  Diagnostics & Routing
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Research Hub" class="md-nav__button md-logo" aria-label="Research Hub" data-md-component="logo">
+      
+  <img src="../../gigameter_white.svg" alt="logo">
+
+    </a>
+    Research Hub
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Welcome
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Spatial & Geofencing
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Spatial & Geofencing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Pillars
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            Pillars
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../spatial/pillar-1-mobility/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mobility Trajectories
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../spatial/pillar-2-quality/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Geolocation Quality
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../spatial/pillar-3-validation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Govt Map Validation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Blueprints
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            Blueprints
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Spatial & Geofencing Blueprint
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Spatial & Geofencing Blueprint
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-objective" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Objective
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Objective">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-the-3-research-pillars-fall-under-this-topis" class="md-nav__link">
+    <span class="md-ellipsis">
+      1.1 The 3 Research Pillars Fall Under This Topis
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-the-two-track-engine-paradigm-shift" class="md-nav__link">
+    <span class="md-ellipsis">
+      1.2 The Two-Track Engine Paradigm Shift
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-4-layer-facility-location-consolidation-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. 4-Layer Facility Location &amp; Consolidation Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. 4-Layer Facility Location &amp; Consolidation Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-overview-pillar-integration-mechanics" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.1 Overview &amp; Pillar Integration Mechanics
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-architectural-blueprint-layer-progression" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.2 Architectural Blueprint &amp; Layer Progression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#23-processing-sequence-module-dependency-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.3 Processing Sequence &amp; Module Dependency Chain
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-pillar-1-mobilityanalyzer-blueprint-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Pillar 1: MobilityAnalyzer Blueprint &amp; Logic
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Pillar 1: MobilityAnalyzer Blueprint &amp; Logic">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-overview-trajectory-disambiguation" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.1 Overview &amp; Trajectory Disambiguation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.1 Overview &amp; Trajectory Disambiguation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#processing-passes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Processing Passes:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-multi-pass-device-mobility-engine-flowchart" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.2 Multi-Pass Device Mobility Engine Flowchart
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#33-summary-comparison-table-of-mobility-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.3 Summary Comparison Table of Mobility Classes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-pillar-2-spatialprofiler-blueprint-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Pillar 2: SpatialProfiler Blueprint &amp; Logic
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Pillar 2: SpatialProfiler Blueprint &amp; Logic">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-overview-data-ingestion-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.1 Overview &amp; Data Ingestion Rules
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.1 Overview &amp; Data Ingestion Rules">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#processing-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Processing Rules:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-configurable-primary-cluster-resolution-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.2 Configurable Primary Cluster Resolution Strategies
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-spatial-profiling-aggregation-engine-flowchart" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.3 Spatial Profiling &amp; Aggregation Engine Flowchart
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-pillar-3-4-facilityvalidator-two-track-engine-mechanics" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Pillar 3 &amp; 4: FacilityValidator &amp; Two-Track Engine Mechanics
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Pillar 3 &amp; 4: FacilityValidator &amp; Two-Track Engine Mechanics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-overview-two-track-engine-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      5.1 Overview &amp; Two-Track Engine Logic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-comprehensive-5-factor-score-component-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      5.2 Comprehensive 5-Factor Score Component Breakdown
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-bssid-coherence-penalty-factor-p_coherence" class="md-nav__link">
+    <span class="md-ellipsis">
+      5.3 BSSID Coherence Penalty Factor (P_coherence)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-two-track-decoupled-taxonomy-engine-flowchart" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Two-Track Decoupled Taxonomy Engine Flowchart
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-decoupled-taxonomy-output-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      7. Decoupled Taxonomy Output Matrix
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Decoupled Taxonomy Output Matrix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-track-1-primary-location-verification-flags-pillar-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      7.1 Track 1: Primary Location Verification Flags (Pillar 3)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-track-2-secondary-hardware-anomaly-tags-pillars-1-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      7.2 Track 2: Secondary Hardware Anomaly Tags (Pillars 1 &amp; 2)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-summary-of-research-data-dictionary-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      8. Summary of Research Data Dictionary Rules
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_3" id="__nav_2_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Python API Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            Python API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/profiler/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SpatialProfiler
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/mobility/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    MobilityAnalyzer
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/validator/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FacilityValidator
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Outages & Connectivity
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Outages & Connectivity
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Pillars
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            Pillars
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../connectivity/outage-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    4-State Outage Models
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Diagnostics & Routing
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Diagnostics & Routing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Pillars
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            Pillars
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../diagnostics/routing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Traceroutes & BBR
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-objective" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Objective
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Objective">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-the-3-research-pillars-fall-under-this-topis" class="md-nav__link">
+    <span class="md-ellipsis">
+      1.1 The 3 Research Pillars Fall Under This Topis
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-the-two-track-engine-paradigm-shift" class="md-nav__link">
+    <span class="md-ellipsis">
+      1.2 The Two-Track Engine Paradigm Shift
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-4-layer-facility-location-consolidation-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. 4-Layer Facility Location &amp; Consolidation Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. 4-Layer Facility Location &amp; Consolidation Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-overview-pillar-integration-mechanics" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.1 Overview &amp; Pillar Integration Mechanics
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-architectural-blueprint-layer-progression" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.2 Architectural Blueprint &amp; Layer Progression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#23-processing-sequence-module-dependency-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.3 Processing Sequence &amp; Module Dependency Chain
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-pillar-1-mobilityanalyzer-blueprint-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Pillar 1: MobilityAnalyzer Blueprint &amp; Logic
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Pillar 1: MobilityAnalyzer Blueprint &amp; Logic">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-overview-trajectory-disambiguation" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.1 Overview &amp; Trajectory Disambiguation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.1 Overview &amp; Trajectory Disambiguation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#processing-passes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Processing Passes:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-multi-pass-device-mobility-engine-flowchart" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.2 Multi-Pass Device Mobility Engine Flowchart
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#33-summary-comparison-table-of-mobility-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      3.3 Summary Comparison Table of Mobility Classes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-pillar-2-spatialprofiler-blueprint-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Pillar 2: SpatialProfiler Blueprint &amp; Logic
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Pillar 2: SpatialProfiler Blueprint &amp; Logic">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-overview-data-ingestion-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.1 Overview &amp; Data Ingestion Rules
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.1 Overview &amp; Data Ingestion Rules">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#processing-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Processing Rules:
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-configurable-primary-cluster-resolution-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.2 Configurable Primary Cluster Resolution Strategies
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-spatial-profiling-aggregation-engine-flowchart" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.3 Spatial Profiling &amp; Aggregation Engine Flowchart
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-pillar-3-4-facilityvalidator-two-track-engine-mechanics" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Pillar 3 &amp; 4: FacilityValidator &amp; Two-Track Engine Mechanics
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Pillar 3 &amp; 4: FacilityValidator &amp; Two-Track Engine Mechanics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-overview-two-track-engine-logic" class="md-nav__link">
+    <span class="md-ellipsis">
+      5.1 Overview &amp; Two-Track Engine Logic
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-comprehensive-5-factor-score-component-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      5.2 Comprehensive 5-Factor Score Component Breakdown
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-bssid-coherence-penalty-factor-p_coherence" class="md-nav__link">
+    <span class="md-ellipsis">
+      5.3 BSSID Coherence Penalty Factor (P_coherence)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-two-track-decoupled-taxonomy-engine-flowchart" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Two-Track Decoupled Taxonomy Engine Flowchart
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-decoupled-taxonomy-output-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      7. Decoupled Taxonomy Output Matrix
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Decoupled Taxonomy Output Matrix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-track-1-primary-location-verification-flags-pillar-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      7.1 Track 1: Primary Location Verification Flags (Pillar 3)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-track-2-secondary-hardware-anomaly-tags-pillars-1-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      7.2 Track 2: Secondary Hardware Anomaly Tags (Pillars 1 &amp; 2)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-summary-of-research-data-dictionary-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      8. Summary of Research Data Dictionary Rules
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="geofencing-technical-blueprint-research-methodology">Geofencing: Technical Blueprint &amp; Research Methodology</h1>
+<p><strong>Version:</strong> <span style="background-color: #677eff; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">v0.2</span></p>
+<p><strong>Status:</strong> <span style="background-color: #e91e63; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Hardening (exploring edge cases)</span></p>
+<p><strong>Maturity:</strong> <span style="background-color: #2e8555; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Active Baseline</span></p>
+<h2 id="1-objective">1. Objective</h2>
+<p>The primary objective of this framework is to replace static, self-reported administrative registries with spatially verified, crowdsourced field telemetry. By capturing background Wi-Fi BSSID environmental scans and high-frequency active speedtests via the GigaMeter application, the system dynamically calculates location truth, evaluates device mobility trajectories, and cross-validates official government administrative records.</p>
+<h3 id="11-the-3-research-pillars-fall-under-this-topis">1.1 The 3 Research Pillars Fall Under This Topis</h3>
+<table>
+<thead>
+<tr>
+<th>Pillar Name</th>
+<th>Primary Input Data</th>
+<th>Core Methodologies</th>
+<th>Primary Output / Operational Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pillar 1: Entity Geofencing &amp; Mobility</td>
+<td>Time-series coordinates, <code>device_id</code>, timestamps</td>
+<td>DBSCAN clustering (eps=150m), operational window (08:00–19:59)</td>
+<td>Mobility classification (<code>STATIONARY</code>, <code>COMMUTER</code>, <code>RELOCATED</code>, <code>HIGH_MOBILITY</code>).</td>
+</tr>
+<tr>
+<td>Pillar 2: Geolocation Quality &amp; Confidence</td>
+<td>Google API resolved lat/lon, accuracy, BSSIDs, SSIDs</td>
+<td>Inverse-variance weighted centroids, 5-factor scoring model, BSSID Coherence Penalty</td>
+<td>Unpenalized location score (S_raw​), mobile hotspot tags, hardware health score.</td>
+</tr>
+<tr>
+<td>Pillar 3: Government Data Validation</td>
+<td>Empirical facility centroids, official government registry pins</td>
+<td>Haversine displacement (D_govt​), Two-Track Engine Architecture</td>
+<td>Decoupled location verification flags (<code>VERIFIED_ACCURATE</code>, <code>GOVT_PIN_MISMATCH</code>, etc.).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-the-two-track-engine-paradigm-shift">1.2 The Two-Track Engine Paradigm Shift</h3>
+<p>Earlier iterations of spatial validation utilized a single-flag cascade where severe hardware volatility (e.g., a laptop transported 200km between a school and a regional office) or high mobile hotspot usage forced the system into outputting a single flag such as <code>BSSID_SPATIAL_SPLIT</code>. This created an analytical paradox: even if the primary spatial cluster matched the official government registry pin perfectly (&lt;= 30m), the single-flag system masked the verified physical building location under a hardware anomaly tag.</p>
+<p>To eliminate this paradox, <code>v0.2</code> introduces the Two-Track Engine Architecture, cleanly decoupling two independent research dimensions:</p>
+<ol>
+<li><strong>Track 1: Location Truth Engine (Pillar 3 Focus):</strong> Evaluates the physical location of the brick-and-mortar facility against official government administrative records using the unpenalized spatial confidence score (S_raw, 0–100) of the primary empirical cluster.</li>
+<li><strong>Track 2: Hardware Integrity Engine (Pillars 1 &amp; 2 Focus):</strong> Evaluates device deployment permanence, mobile hotspot dependency, and spatial split anomalies (&gt; 2km), applying a multiplicative BSSID Coherence Penalty (P_coherence) to yield a dedicated <code>hardware_health_score</code> and decoupled <code>hardware_anomaly_tags</code>.</li>
+</ol>
+<h2 id="2-4-layer-facility-location-consolidation-architecture">2. 4-Layer Facility Location &amp; Consolidation Architecture</h2>
+<h3 id="21-overview-pillar-integration-mechanics">2.1 Overview &amp; Pillar Integration Mechanics</h3>
+<p>Raw crowdsourced telemetry contains significant spatial noise introduced by personal mobile tethering (teacher smartphones), staff commuter devices, and hardware relocations. To transform raw Wi-Fi BSSID environmental scans into an empirical location truth engine, processing is organised into a 4-Layer Consolidation Framework.</p>
+<p>This 4-layer model directly operationalises our core research pillars:
+*   Layer 1 executes Pillar 1 (<code>MobilityAnalyzer</code>) to isolate device-level mobility trajectories and extract primary operational clusters.
+*   Layer 2 executes Pillar 2 (<code>SpatialProfiler</code>) to calculate accuracy-weighted empirical centroids across persistent fixed infrastructure.
+*   Layer 3 executes the composite scoring engine inside <code>FacilityValidator</code> to measure hardware stability, multi-device spatial consensus, and BSSID coherence.
+*   Layer 4 completes Pillars 1, 2 &amp; 3 (<code>FacilityValidator</code>) by cross-validating empirical centroids against official government administrative coordinates to output decoupled primary location flags and secondary hardware anomaly tags.</p>
+<h3 id="22-architectural-blueprint-layer-progression">2.2 Architectural Blueprint &amp; Layer Progression</h3>
+<pre class="mermaid"><code>graph TD
+    L1["&lt;div style='width: 550px; text-align: left;'&gt;&lt;b&gt;LAYER 1: Device Trajectory Disambiguation (Pillar 1 Output)&lt;/b&gt;&lt;br/&gt;• Filter strictly for operational hours (08:00-19:59 local time)&lt;br/&gt;• Extract Cluster 0 (Primary) for Stationary &amp; Commuter devices&lt;br/&gt;• Discard secondary residential clusters &amp; relocated device points&lt;/div&gt;"]
+
+    L2["&lt;div style='width: 550px; text-align: left;'&gt;&lt;b&gt;LAYER 2: Empirical Facility Centroid Engine (Pillar 2 Output)&lt;/b&gt;&lt;br/&gt;• Calculate Accuracy-Weighted Spatial Centroid across valid devices&lt;br/&gt;• Execute Strategy: TELEMETRY_DOMINANCE | GOVT_PROXIMITY | STATIONARY&lt;br/&gt;• Extract persistent 'Anchor BSSIDs' observed across multiple devices&lt;/div&gt;"]
+
+    L3["&lt;div style='width: 550px; text-align: left;'&gt;&lt;b&gt;LAYER 3: Two-Track Engine Evaluation (Pillars 1, 2 &amp; 3 Output)&lt;/b&gt;&lt;br/&gt;• Track 1: Location Confidence Score = S_raw (0 - 100 Unpenalized)&lt;br/&gt;• Track 2: Hardware Health Score = S_raw * P_coherence&lt;br/&gt;• Apply Multiplicative Coherence Penalty (P_coherence) for Splits &gt;2km&lt;/div&gt;"]
+
+    L4["&lt;div style='width: 550px; text-align: left;'&gt;&lt;b&gt;LAYER 4: Decoupled Taxonomy Output Engine&lt;/b&gt;&lt;br/&gt;• Track 1 Flag: VERIFIED_ACCURATE, GOVT_PIN_MISMATCH, etc.&lt;br/&gt;• Track 2 Tags: ['BSSID_SPATIAL_SPLIT'], ['HOTSPOT_TETHERED']&lt;/div&gt;"]
+
+    L1 --&gt; L2
+    L2 --&gt; L3
+    L3 --&gt; L4</code></pre>
+<ol>
+<li>
+<p><strong>SpatialProfiler answers:</strong> <em>"Where is the physical building located?"</em></p>
+</li>
+<li>
+<p><strong>MobilityAnalyzer answers:</strong> <em>"How are the individual devices moving relative to that building?"</em></p>
+</li>
+<li>
+<p><strong>FacilityValidator answers:</strong> <em>"Can we verify the building location on government maps (Track 1), and how reliable is the installed monitoring hardware (Track 2)?"</em></p>
+</li>
+</ol>
+<h2 id="23-processing-sequence-module-dependency-chain">2.3 Processing Sequence &amp; Module Dependency Chain</h2>
+<p>To ensure data integrity and prevent circular import issues in code execution, the pipeline components run in a strict, unidirectional dependency chain:</p>
+<pre class="mermaid"><code>graph TD
+    S1["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Step 1: Pre-Processing &amp; Timezone Enrichment ]&lt;/b&gt;&lt;br/&gt;• Maps UTC timestamps to local device time (08:00 - 19:59 window)&lt;/div&gt;"]
+
+    S2["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Step 2: SpatialProfiler Execution (Pillar 2 Base) ]&lt;/b&gt;&lt;br/&gt;• Identifies &amp; tags mobile tethering hotspots (SSID regex &amp; drift &gt; 1km)&lt;br/&gt;• Computes physical Empirical Facility Centroid via Strategy Mode&lt;/div&gt;"]
+
+    S3["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Step 3: MobilityAnalyzer Execution (Pillar 1 Trajectory) ]&lt;/b&gt;&lt;br/&gt;• Computes instantaneous displacement (displacement_m) per ping&lt;br/&gt;• Runs DBSCAN clustering to categorize device mobility behavior&lt;/div&gt;"]
+
+    S4["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Step 4: FacilityValidator Execution (Pillars 1, 2 &amp; 3 Truth Engine) ]&lt;/b&gt;&lt;br/&gt;• Evaluates 5-Factor Raw Score &amp; BSSID Coherence Penalty (P_coherence)&lt;br/&gt;• &lt;b&gt;Track 1:&lt;/b&gt; Evaluates unpenalized centroid vs Govt Pin ➔ location_verification_flag&lt;br/&gt;• &lt;b&gt;Track 2:&lt;/b&gt; Evaluates hardware health score &amp; outputs hardware_anomaly_tags&lt;/div&gt;"]
+
+    S1 --&gt; S2
+    S2 --&gt;|Passes Facility Centroid Anchor| S3
+    S3 --&gt;|Passes Device Mobility Classes &amp; Clusters| S4</code></pre>
+<h2 id="3-pillar-1-mobilityanalyzer-blueprint-logic">3. Pillar 1: MobilityAnalyzer Blueprint &amp; Logic</h2>
+<h3 id="31-overview-trajectory-disambiguation">3.1 Overview &amp; Trajectory Disambiguation</h3>
+<p>The <code>MobilityAnalyzer</code> module evaluates hardware movement trajectories at the individual <code>device_id</code> level. It utilizes DBSCAN (Density-Based Spatial Clustering of Applications with Noise) with a native Haversine metric to group geographic locations into spatial clusters without requiring a pre-defined cluster count.</p>
+<h4 id="processing-passes">Processing Passes:</h4>
+<ul>
+<li><strong>Pass 1: Mobile Hotspot &amp; Drift Filtering</strong>: Identifies personal mobile hotspots and tags high-volatility BSSIDs to prevent consumer phones from skewing hardware trajectory analysis.</li>
+<li><strong>Pass 2: Density-Based Spatial Clustering (DBSCAN)</strong>: Groups valid coordinate pairs per device using a spatial radius threshold (eps = 150 meters) and a minimum density threshold (min_samples = 3).</li>
+<li><strong>Pass 3: Temporal &amp; Operational Disambiguation</strong>: Evaluates scan distributions across clusters during active operational hours (08:00–19:59) vs. off-hours/weekends.</li>
+<li><strong>Pass 4</strong>: Behavioral Classification &amp; Geofence Auditing: Classifies hardware behavior into four operational states: <code>STATIONARY</code>, <code>COMMUTER</code>, <code>RELOCATED</code>, or <code>HIGH_MOBILITY</code>.</li>
+</ul>
+<h3 id="32-multi-pass-device-mobility-engine-flowchart">3.2 Multi-Pass Device Mobility Engine Flowchart</h3>
+<pre class="mermaid"><code>graph TD
+    IN["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Input: Valid Device Telemetry Scans ]&lt;/b&gt;&lt;/div&gt;"]
+
+    P1["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Pass 1: Mobile Hotspot &amp; Drift Detection ]&lt;/b&gt;&lt;br/&gt;• Isolate fixed infrastructure scans from mobile tethering&lt;/div&gt;"]
+
+    P2["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Pass 2: DBSCAN Spatial Clustering ]&lt;/b&gt;&lt;br/&gt;• Convert coordinates to Radians: (lat, lon) * (&amp;pi; / 180)&lt;br/&gt;• Parameter: eps = 150m / 6371008.8m (Earth Radius)&lt;br/&gt;• Parameter: min_samples = 3&lt;br/&gt;• Output: Assign Cluster ID (0, 1, 2... or -1 for Noise)&lt;/div&gt;"]
+
+    P3["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Pass 3: Temporal &amp; Operational Disambiguation ]&lt;/b&gt;&lt;br/&gt;• Calculate Cluster 0 centroid (Primary Operational Cluster)&lt;br/&gt;• Measure geofence displacement (D_centroid) per ping&lt;br/&gt;• Evaluate timestamp sequence across secondary clusters&lt;/div&gt;"]
+
+    P4["&lt;div style='min-width: 550px; text-align: left;'&gt;&lt;b&gt;[ Pass 4: Behavioral Classification Engine ]&lt;/b&gt;&lt;/div&gt;"]
+
+    %% Outcomes %%
+    O1["&lt;b&gt;STATIONARY&lt;/b&gt;&lt;br/&gt;(Compliant Anchor)"]
+    O2["&lt;b&gt;COMMUTER&lt;/b&gt;&lt;br/&gt;(Staff Personal)"]
+    O3["&lt;b&gt;RELOCATED&lt;/b&gt;&lt;br/&gt;(Hardware Moved)"]
+    O4["&lt;b&gt;HIGH_MOBILITY&lt;/b&gt;&lt;br/&gt;(Mobile Hotspot)"]
+
+    %% Flow %%
+    IN --&gt; P1
+    P1 --&gt; P2
+    P2 --&gt; P3
+    P3 --&gt; P4
+
+    %% Branching Logic %%
+    P4 --&gt;|1 Cluster &amp;&lt;br/&gt;Compliant &gt; 90%| O1
+    P4 --&gt;|2+ Clusters &amp;&lt;br/&gt;Off-Hour Shift| O2
+    P4 --&gt;|2+ Clusters &amp;&lt;br/&gt;Sequential Shift| O3
+    P4 --&gt;|Compliance &lt; 50% /&lt;br/&gt;No Form| O4</code></pre>
+<h2 id="33-summary-comparison-table-of-mobility-classes">3.3 Summary Comparison Table of Mobility Classes</h2>
+<table>
+<thead>
+<tr>
+<th>Mobility Class</th>
+<th>Cluster Count (K)</th>
+<th>Spatial Pattern</th>
+<th>Temporal Behavior</th>
+<th>Real-World Operational Context</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>STATIONARY</code></td>
+<td>1 Primary Cluster</td>
+<td>Tight spatial anchor (&lt;=150m - 200m)</td>
+<td>High compliance (&gt;= 90%) across all days and hours</td>
+<td>Dedicated, fixed desktop or router monitoring hardware anchored to the school building.</td>
+</tr>
+<tr>
+<td><code>COMMUTER</code></td>
+<td>2+ Clusters</td>
+<td>Alternates between Cluster 0 (School) and Cluster 1+ (Home/Off-site)</td>
+<td>Cluster 0 during active hours (08:00–19:59); Cluster 1 off-hours and weekends</td>
+<td>Mobile laptop or tablet owned by a teacher/staff member who brings it to work and takes it home.</td>
+</tr>
+<tr>
+<td><code>RELOCATED</code></td>
+<td>2+ Clusters</td>
+<td>Permanent geographic shift from Cluster A to Cluster B</td>
+<td>Strictly Cluster A before Date T; strictly Cluster B after Date T</td>
+<td>Equipment permanently transferred to another facility, stolen, or school physically relocated.</td>
+</tr>
+<tr>
+<td><code>HIGH_MOBILITY</code></td>
+<td>Many / Noise</td>
+<td>Low geofence compliance (&lt; 50%) or scattered spatial points</td>
+<td>Volatile across days and operational hours</td>
+<td>Roaming mobile hotspot, staff personal smartphone, or field audit kit.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-pillar-2-spatialprofiler-blueprint-logic">4. Pillar 2: SpatialProfiler Blueprint &amp; Logic</h2>
+<h3 id="41-overview-data-ingestion-rules">4.1 Overview &amp; Data Ingestion Rules</h3>
+<p>The <code>SpatialProfiler</code> module serves as the <strong>foundational spatial processing engine</strong>. It ingests raw telemetry measurements, standardizes facility identifiers (<code>school_id_giga</code>), enriches records with local device timestamps, and tags consumer mobile hotspots, and resolves empirical facility centroids using configurable strategy modes.</p>
+<h4 id="processing-rules">Processing Rules:</h4>
+<ol>
+<li><strong>Strict No-IP Fallback Policy:</strong> The profiler strictly discards records where <code>detected_latitude</code> or <code>detected_longitude</code> is <code>null</code>. IP-based geolocation fallback is never applied.</li>
+<li><strong>Operational Window Isolation:</strong> Time-series telemetry is filtered strictly between 08:00:00 and 19:59:59 local device time (<code>is_operational_hours = True</code>) to prevent nighttime or off-hour device transport from skewing facility locations.</li>
+<li><strong>Consumer Hotspot &amp; Drift Engine:</strong><ol>
+<li><strong>SSID Regex Pattern Matching:</strong> Passive and active SSIDs are evaluated against a consumer hotspot pattern:<ol>
+<li>Pattern = (?i)(iphone\android\galaxy\hotspot\teacher\pixel\redmi\tether\samsung\huawei\oppo\vivo\xiaomi\realme\mobicom\unitel\mifi)</li>
+</ol>
+</li>
+<li><strong>Multi-Day Spatial Drift Check:</strong> BSSIDs displaying multi-day spatial drift exceeding 1000m across different dates are tagged as <code>is_hotspot_drift = True</code>.</li>
+</ol>
+</li>
+<li><strong>Candidate BSSID Spatial Clustering &amp; Spatial Splits:</strong><ul>
+<li>Pairwise distances (D_bssid) between BSSID centroids are calculated.</li>
+<li>D_bssid &lt;= 200m → Merged &amp; averaged (same physical campus/building).</li>
+<li>200m &lt; D_bssid \&lt;= 2000m → Retained as minor campus dispersion.</li>
+<li>D_bssid &gt; 2000m → Triggers <code>BSSID_SPATIAL_SPLIT</code> anomaly tag.</li>
+</ul>
+</li>
+</ol>
+<h3 id="42-configurable-primary-cluster-resolution-strategies">4.2 Configurable Primary Cluster Resolution Strategies</h3>
+<p>To address BSSID splits (&gt; 2km) without introducing analytical bias, <code>SpatialProfiler</code> supports three configurable resolution modes:</p>
+<ul>
+<li>
+<p><strong>Mode 1:</strong> <code>GOVT_PROXIMITY_ANCHOR</code> <strong>(Prior-Informed Default):</strong> If a BSSID split occurs, the engine checks if any candidate cluster centroid is &lt;= 2000m from official government coordinates (phi_govt, lambda_govt). If candidate clusters exist near the government pin, it selects the cluster with the highest operational scan density among them.</p>
+</li>
+<li>
+<p><strong>Mode 2:</strong> <code>TELEMETRY_DOMINANCE</code> <strong>(Unbiased Field Benchmark):</strong> Evaluates spatial data strictly based on scan volume during active operational hours (08:00–19:59), ignoring government coordinates entirely. Ideal for Pillar 3 auditing without circular reasoning.</p>
+</li>
+<li>
+<p><strong>Mode 3:</strong> <code>STATIONARY_FIRST</code> <strong>(Hardware-First Mode):</strong> Filters candidate clusters for scans originating strictly from devices classified as <code>STATIONARY</code> before computing the facility centroid.</p>
+</li>
+</ul>
+<h3 id="43-spatial-profiling-aggregation-engine-flowchart">4.3 Spatial Profiling &amp; Aggregation Engine Flowchart</h3>
+<pre class="mermaid"><code>graph TD
+    %% Linear Filters
+    IN["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Raw Telemetry Ingestion ]&lt;/b&gt;&lt;br/&gt;• Raw measurements &amp; pings&lt;/div&gt;"]
+    F1["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Filter: App Version &amp; Source ]&lt;/b&gt;&lt;br/&gt;• App Version &amp;ge; 2.0.2 &amp; source = 'DailyCheckApp'&lt;/div&gt;"]
+    F2["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Temporal Standardization ]&lt;/b&gt;&lt;br/&gt;• UTC &amp;rarr; Local Device Timestamp&lt;/div&gt;"]
+    F3["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Operational Window Filter ]&lt;/b&gt;&lt;br/&gt;• 08:00 to 19:59 Local Time&lt;/div&gt;"]
+    F4["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Strict No-IP Filter ]&lt;/b&gt;&lt;br/&gt;• Drop if detected_latitude IS NULL&lt;/div&gt;"]
+
+    %% Hotspot Detection
+    HS["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Mobile Hotspot &amp; Drift Engine ]&lt;/b&gt;&lt;br/&gt;• Regex Match: SSID matches consumer hotspot patterns?&lt;br/&gt;• Spatial Drift: BSSID moves &gt; 1000m across days?&lt;/div&gt;"]
+
+    HS_YES["Tag: is_mobile_hotspot = True"]
+    HS_NO["Tag: is_mobile_hotspot = False"]
+
+    %% Clustering
+    CL["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Candidate BSSID Spatial Clustering ]&lt;/b&gt;&lt;br/&gt;• Group scans by BSSID &amp; calculate inverse-variance weighted centroids&lt;br/&gt;• Measure pairwise distance between BSSID centroids (max_bssid_dist_m)&lt;/div&gt;"]
+
+    %% Distance Branches
+    C1["Merge &amp; Average&lt;br/&gt;&lt;i&gt;(Same Campus)&lt;/i&gt;"]
+    C2["Tag: CAMPUS_DISPERSION"]
+    C3["Trigger: BSSID_SPATIAL_SPLIT"]
+
+    %% Strategy Engine
+    ST["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Configurable Strategy Resolution Engine ]&lt;/b&gt;&lt;br/&gt;• &lt;b&gt;GOVT_PROXIMITY_ANCHOR:&lt;/b&gt; Select cluster &amp;le; 2km from Govt Pin&lt;br/&gt;• &lt;b&gt;TELEMETRY_DOMINANCE:&lt;/b&gt; Select cluster with max operational scans&lt;br/&gt;• &lt;b&gt;STATIONARY_FIRST:&lt;/b&gt; Select cluster from stationary devices&lt;/div&gt;"]
+
+    %% Output
+    EXP["&lt;div style='min-width: 500px; text-align: left;'&gt;&lt;b&gt;[ Export ]&lt;/b&gt;&lt;br/&gt;• Empirical Facility Centroid &amp; BSSID Infrastructure Profiles&lt;/div&gt;"]
+
+    %% Connections
+    IN --&gt; F1 --&gt; F2 --&gt; F3 --&gt; F4 --&gt; HS
+
+    HS --&gt;|Yes| HS_YES
+    HS --&gt;|No| HS_NO
+
+    HS_YES --&gt; CL
+    HS_NO --&gt; CL
+
+    CL --&gt;|dist &amp;le; 200m| C1
+    CL --&gt;|200m &lt; dist &amp;le; 2km| C2
+    CL --&gt;|dist &gt; 2km| C3
+
+    C1 --&gt; ST
+    C2 --&gt; ST
+    C3 --&gt; ST
+
+    ST --&gt; EXP</code></pre>
+<h2 id="_1"></h2>
+<h2 id="5-pillar-3-4-facilityvalidator-two-track-engine-mechanics">5. Pillar 3 &amp; 4: FacilityValidator &amp; Two-Track Engine Mechanics</h2>
+<h3 id="51-overview-two-track-engine-logic">5.1 Overview &amp; Two-Track Engine Logic</h3>
+<p>The <code>FacilityValidator</code> module consolidates multi-device spatial clusters into a Two-Track Validation Engine. It bridges empirical field telemetry with administrative metadata to evaluate two independent tracks: Location Truth (Pillar 3) and Hardware Health (Pillars 1 &amp; 2).</p>
+<h3 id="52-comprehensive-5-factor-score-component-breakdown">5.2 Comprehensive 5-Factor Score Component Breakdown</h3>
+<p>The raw spatial confidence score (S_raw, 0–100) evaluates five distinct spatial and operational dimensions of the primary empirical cluster:</p>
+<div class="arithmatex">\[S_{\text{raw}} = S_{\text{stability}} + S_{\text{consensus}} + S_{\text{bssid}} + S_{\text{depth}} + S_{\text{precision}}\]</div>
+<table>
+<thead>
+<tr>
+<th>Component Name</th>
+<th>Max Points</th>
+<th>Tracked Inputs &amp; Metrics</th>
+<th>Mathematical Logic &amp; Evaluation Rules</th>
+<th>Operational Impact &amp; Thresholds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Device Stability Profile (S_stability)</td>
+<td>30 pts</td>
+<td>Categorical mobility class of all devices registered to facility (<code>STATIONARY</code>, <code>COMMUTER</code>, <code>RELOCATED</code>, <code>HIGH_MOBILITY</code>).</td>
+<td><code>if STATIONARY in devices: score = 30.0</code><br><br><code>elif COMMUTER in devices: score = 20.0</code><br><br><code>else: score = 10.0</code><br></td>
+<td>Evaluates hardware permanence. Awarded 30 points if at least one stationary device anchors the building.</td>
+</tr>
+<tr>
+<td>2. Multi-Device Spatial Consensus (S_consensus)</td>
+<td>25 pts</td>
+<td>Maximum pairwise Haversine distance (d_max in meters) between primary cluster centroids across multiple devices.</td>
+<td><code>if d_max &lt;= 30: score = 25.0</code><br><br><code>elif 30 &lt; d_max &lt;= 200:</code><br><br><code>score = 25.0 * (1.0 - (d_max - 30) / 170.0)</code><br><br><code>else: score = 0.0</code><br><br>(Single-device default = 12.5 pts)<br></td>
+<td>Evaluates whether distinct hardware devices agree on facility location. d_max &gt; 200m indicates conflicting hardware setups.</td>
+</tr>
+<tr>
+<td>3. BSSID Infrastructure Persistence (S_bssid)</td>
+<td>20 pts</td>
+<td>Presence of fixed, non-null BSSIDs and active operational days recorded with valid BSSIDs.</td>
+<td><code>if bssid_exists and days_active &gt;= 3:</code><br><br><code>score = 20.0</code><br><br><code>else: score = 10.0</code><br></td>
+<td>Rewards persistent Wi-Fi router infrastructure. Ambient background scans without associated BSSIDs receive 10 points.</td>
+</tr>
+<tr>
+<td>4. Data Temporal Depth (S_depth)</td>
+<td>15 pts</td>
+<td>Count of unique operational days recorded in the observation window.</td>
+<td><code>score = min(15.0, 15.0 * (days_active / 10.0))</code><br></td>
+<td>Scales linearly up to 10 active days. Reaching 10+ operational days awards the full 15 points.</td>
+</tr>
+<tr>
+<td>5. API Precision Radius (S_precision)</td>
+<td>10 pts</td>
+<td>Mean reported Google Geolocation API accuracy radius (mean_acc in meters).</td>
+<td><code>score = max(0.0, 10.0 * (1.0 - (mean_acc - 10) / 90.0))</code><br></td>
+<td>Evaluates precision returned by Google API. mean_acc &lt;= 10m receives 10 points; mean_acc &gt;= 100m receives 0 points.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="53-bssid-coherence-penalty-factor-p_coherence">5.3 BSSID Coherence Penalty Factor (P_coherence)</h3>
+<p>The BSSID Coherence Penalty measures spatial agreement across all BSSIDs associated with a facility (D_bssid_max in meters). It is applied strictly to Track 2 (Hardware Health) to penalize roaming hardware without degrading Track 1 (Location Truth):</p>
+<div class="arithmatex">\[P_{\text{coherence}} = 
+\begin{cases} 
+1.0, &amp; \text{if } D_{\text{bssid_max}} \le 1000\text{m } \text{(Tight Alignment)} \\[1ex]
+1.0 - 0.5 \times \left( \frac{D_{\text{bssid_max}} - 1000}{1000} \right), &amp; \text{if } 1000\text{m} &lt; D_{\text{bssid_max}} \le 2000\text{m} \\[1ex]
+0.1, &amp; \text{if } D_{\text{bssid_max}} &gt; 2000\text{m } \text{(Severe BSSID Split)}
+\end{cases}\]</div>
+<div class="arithmatex">\[\text{Track 1 (Location Confidence Score)} = S_{\text{raw}}\]</div>
+<div class="arithmatex">\[\text{Track 2 (Hardware Health Score)} = S_{\text{raw}} \times P_{\text{coherence}}\]</div>
+<h2 id="6-two-track-decoupled-taxonomy-engine-flowchart">6. Two-Track Decoupled Taxonomy Engine Flowchart</h2>
+<p>The parallel evaluation flowchart demonstrates how Track 1 (Location Truth) and Track 2 (Hardware Integrity) execute independently:</p>
+<pre class="mermaid"><code>graph TD
+    IN["&lt;div style='min-width: 300px; text-align: center;'&gt;&lt;b&gt;[ Facility Telemetry Input ]&lt;/b&gt;&lt;/div&gt;"]
+
+    IN --&gt; T1
+    IN --&gt; T2
+
+    subgraph Track1 ["TRACK 1: LOCATION TRUTH ENGINE"]
+        T1["&lt;b&gt;TRACK 1: LOCATION TRUTH ENGINE&lt;/b&gt;&lt;br/&gt;&lt;i&gt;(Evaluates Dominant Empirical Cluster)&lt;/i&gt;"]
+        S_RAW["Calculate Raw Score (S_raw)"]
+        PIN_CHECK{"Govt Registry Pin&lt;br/&gt;Available?"}
+
+        %% Decisions
+        C1{"Score &amp;ge; 70 &amp;&lt;br/&gt;D_govt &amp;le; 200m?"}
+        C2{"Score &amp;ge; 70 &amp;&lt;br/&gt;D_govt &gt; 500m?"}
+        C3{"Score &amp;ge; 60 &amp;&lt;br/&gt;200m &lt; D_govt &amp;le; 500m?"}
+        C4{"Score &lt; 50?"}
+
+        %% Output Flags
+        F_NO_PIN["&lt;b&gt;NO_GOVT_PIN_AVAILABLE&lt;/b&gt;"]
+        F_ACC["&lt;b&gt;VERIFIED_ACCURATE&lt;/b&gt;"]
+        F_MIS["&lt;b&gt;GOVT_PIN_MISMATCH&lt;/b&gt;"]
+        F_DIS["&lt;b&gt;CAMPUS_DISPERSION&lt;/b&gt;"]
+        F_UNS["&lt;b&gt;UNSTABLE_MOBILE_ONLY&lt;/b&gt;"]
+        F_MIN["&lt;b&gt;MINOR_DISCREPANCY&lt;/b&gt;"]
+
+        T1 --&gt; S_RAW --&gt; PIN_CHECK
+        PIN_CHECK --&gt;|NO| F_NO_PIN
+        PIN_CHECK --&gt;|YES| C1
+
+        C1 --&gt;|YES| F_ACC
+        C1 --&gt;|NO| C2
+
+        C2 --&gt;|YES| F_MIS
+        C2 --&gt;|NO| C3
+
+        C3 --&gt;|YES| F_DIS
+        C3 --&gt;|NO| C4
+
+        C4 --&gt;|YES| F_UNS
+        C4 --&gt;|NO| F_MIN
+    end
+
+    subgraph Track2 ["TRACK 2: HARDWARE INTEGRITY ENGINE"]
+        T2["&lt;b&gt;TRACK 2: HARDWARE INTEGRITY ENGINE&lt;/b&gt;&lt;br/&gt;&lt;i&gt;(Evaluates Device &amp; BSSID Reliability)&lt;/i&gt;"]
+        P_COH["Calculate BSSID Coherence Penalty&lt;br/&gt;(P_coherence)"]
+        H_SCORE["Hardware Health Score = S_raw * P_coherence"]
+
+        ANOM["&lt;b&gt;Evaluates Hardware Anomalies:&lt;/b&gt;&lt;br/&gt;• D_bssid_max &gt; 2km? &amp;rarr; Tag: &lt;code&gt;BSSID_SPATIAL_SPLIT&lt;/code&gt;&lt;br/&gt;• Hotspot Scans &amp;ge; 50%? &amp;rarr; Tag: &lt;code&gt;HOTSPOT_TETHERED_FACILITY&lt;/code&gt;"]
+
+        OUT_TAGS["&lt;b&gt;Output List:&lt;/b&gt;&lt;br/&gt;&lt;code&gt;hardware_anomaly_tags&lt;/code&gt;"]
+
+        T2 --&gt; P_COH --&gt; H_SCORE --&gt; ANOM --&gt; OUT_TAGS
+    end</code></pre>
+<h2 id="7-decoupled-taxonomy-output-matrix">7. Decoupled Taxonomy Output Matrix</h2>
+<h3 id="71-track-1-primary-location-verification-flags-pillar-3">7.1 Track 1: Primary Location Verification Flags (Pillar 3)</h3>
+<table>
+<thead>
+<tr>
+<th>Location Flag</th>
+<th>Trigger Conditions</th>
+<th>Real-World Operational Interpretation</th>
+<th>Recommended Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>VERIFIED_ACCURATE</code></td>
+<td>S_raw &gt;= 70.0 AND D_govt &lt;= 200m</td>
+<td>Field telemetry confirms official government registry coordinates. High-confidence baseline established.</td>
+<td>None. Facility baseline verified.</td>
+</tr>
+<tr>
+<td><code>GOVT_PIN_MISMATCH</code></td>
+<td>S_raw &gt;= 70.0 AND D_govt &gt; 500m</td>
+<td>Empirical telemetry is spatially stable, but government coordinates are significantly inaccurate (e.g., pinned to village center or district office).</td>
+<td>Submit spatial coordinate correction to Ministry.</td>
+</tr>
+<tr>
+<td><code>CAMPUS_DISPERSION</code></td>
+<td>S_raw &gt;= 60.0 AND 200m &lt; D_govt &lt;= 500m</td>
+<td>Telemetry confirms presence near the government pin, but spatial spread reflects a large multi-building campus, sports field, or peripheral annex.</td>
+<td>Retain location as valid; flag for minor boundary refinement.</td>
+</tr>
+<tr>
+<td><code>UNSTABLE_MOBILE_ONLY</code></td>
+<td>S_raw &lt; 50.0</td>
+<td>Telemetry is too sparse or spatially volatile to guarantee physical building coordinates.</td>
+<td>Needs fixed monitoring hardware.</td>
+</tr>
+<tr>
+<td><code>NO_GOVT_PIN_AVAILABLE</code></td>
+<td>Official Govt Coordinates missing/null</td>
+<td>Empirical centroid calculated successfully, but no government metadata exists for comparison.</td>
+<td>Append empirical centroid to registry.</td>
+</tr>
+<tr>
+<td><code>INSUFFICIENT_DATA</code></td>
+<td>Total valid spatial scans &lt; 5 in the observation window</td>
+<td>Fewer than 5 valid spatial scans recorded in the observation window.</td>
+<td>Await additional telemetry syncs.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="72-track-2-secondary-hardware-anomaly-tags-pillars-1-2">7.2 Track 2: Secondary Hardware Anomaly Tags (Pillars 1 &amp; 2)</h3>
+<table>
+<thead>
+<tr>
+<th>Anomaly Tag</th>
+<th>Trigger Conditions</th>
+<th>Real-World Operational Interpretation</th>
+<th>Recommended Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BSSID_SPATIAL_SPLIT</code></td>
+<td>Max pairwise BSSID distance D_bssid_max &gt; 2000m (2km)</td>
+<td>Hardware monitoring devices registered to this facility operate across two or more distinct geographic locations (e.g., laptop transported between school and regional office).</td>
+<td>Flag monitoring setup as mobile. Dedicated fixed hardware missing at the school.</td>
+</tr>
+<tr>
+<td><code>HOTSPOT_TETHERED_FACILITY</code></td>
+<td>Active Wi-Fi scans matching consumer hotspot patterns or multi-day drift &gt; 1km are &gt;= 50%</td>
+<td>Entity relies primarily on staff personal smartphones or mobile hotspots for connectivity rather than fixed ISP infrastructure.</td>
+<td>Flag connectivity as temporary/mobile tethered. Exclude mobile SSIDs from building checks.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="8-summary-of-research-data-dictionary-rules">8. Summary of Research Data Dictionary Rules</h2>
+<ul>
+<li><strong>Measurement Source Filtering:</strong> Raw measurement payloads use <code>source = 'DailyCheckApp'</code> in the database. Data is filtered on this field for app-specific speedtest analysis.</li>
+<li><strong>Timezone Standardization:</strong> Raw UTC timestamps (<code>created_timestamp</code>) always converted to local device time before executing operational hour (08:00–19:59) models.</li>
+<li><strong>Strict No-IP Fallback Policy:</strong> IP-based geolocation is never used by GigaMeter. Always filter out null coordinates (<code>WHERE detected_latitude IS NOT NULL</code>) before spatial calculations. IP fallback imputation NEVER been attempted.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; UNICEF Giga 2026
+    </div>
+  
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/unicef/gigameter-research" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.indexes", "navigation.instant", "navigation.tracking", "navigation.top", "content.tabs.link", "code.copy", "content.code.annotate", "search.suggest", "search.highlight", "search.share", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "v0.2", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
