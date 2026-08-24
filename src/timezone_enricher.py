@@ -149,7 +149,9 @@ def enrich_telemetry_with_local_time(
     df["tz_name"] = df["school_id_giga"].map(tz_map).fillna("UTC")
 
     # Step 3: Parse UTC timestamp
-    df["created_timestamp_utc"] = pd.to_datetime(df[timestamp_col], utc=True)
+    df["created_timestamp_utc"] = pd.to_datetime(
+        df[timestamp_col], format="ISO8601", utc=True
+    )
 
     # Step 4: Convert to local time grouped by timezone for vectorized performance
     def _convert_group(group: pd.DataFrame) -> pd.DataFrame:

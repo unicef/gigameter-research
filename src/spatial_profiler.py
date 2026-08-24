@@ -10,6 +10,8 @@ import pandas as pd
 import numpy as np
 from enum import Enum
 from typing import Tuple, List, Dict, Any, Optional
+import plotly.express as px
+import plotly.graph_objects as go
 
 from gigaspatial.processing import calculate_distance as haversine_distance_meters
 
@@ -62,6 +64,8 @@ class SpatialProfiler:
 
         # Ensure operational hours flag exists (08:00 - 19:59 local device time)
         if "is_operational_hours" not in self.df.columns:
+            if "is_school_hours" in self.df.columns:
+                self.df["is_operational_hours"] = self.df["is_school_hours"]
             if "local_hour" in self.df.columns:
                 self.df["is_operational_hours"] = self.df["local_hour"].between(8, 19)
             else:
@@ -466,128 +470,93 @@ class SpatialProfiler:
             .reset_index(drop=True)
         )
 
-    # def build_facility_spatial_summary(
-    #     self, schools_df: Optional[pd.DataFrame] = None
-    # ) -> pd.DataFrame:
-    #     """
-    #     Pillars 1 & 3: Facility-Level Spatial Centroids & Displacement.
-    #     Uses ALL valid API coordinates (including ambient scans where BSSID is NULL).
-    #     Calculates accuracy-weighted spatial centroids and displacement vs government pins.
-    #     """
-    #     valid_geo = self.df[
-    #         self.df["detected_latitude"].notna() & self.df["detected_longitude"].notna()
-    #     ].copy()
+    def plot_signal_vs_accuracy_density(self) -> go.Figure:
+        """
+        Renders a 2D Scatter/Density plot mapping Wi-Fi Signal Strength (dBm)
+        against Google API Precision Radius (meters).
+        """
+        signal_col = (
+            "wifi_signal_dbm"
+            if "wifi_signal_dbm" in self.df.columns
+            else "detected_wifi_signal"
+        )
+        if (
+            signal_col not in self.df.columns
+            or "detected_location_accuracy" not in self.df.columns
+        ):
+            fig = go.Figure()
+            fig.update_layout(
+                title="Wi-Fi Signal vs Precision metrics unavailable in dataset"
+            )
+            return fig
 
-    #     if valid_geo.empty:
-    #         print("Warning: No valid coordinate records found.")
-    #         return pd.DataFrame()
+        plot_df = self.df[
+            self.df[signal_col].notna() & self.df["detected_location_accuracy"].notna()
+        ].copy()
 
-    #     # -------------------------------------------------------------------
-    #     # Step 1: Resolve Official Government Coordinates
-    #     # -------------------------------------------------------------------
-    #     # Option A: Merge explicitly provided schools_df
-    #     if schools_df is not None and not schools_df.empty:
-    #         s_df = schools_df.copy()
-    #         if "giga_id_school" in s_df.columns:
-    #             s_df = s_df.rename(columns={"giga_id_school": "school_id_giga"})
+        fig = px.scatter(
+            plot_df,
+            x=signal_col,
+            y="detected_location_accuracy",
+            color="is_mobile_hotspot",
+            color_discrete_map={True: "#d62728", False: "#1f77b4"},
+            opacity=0.6,
+            labels={
+                signal_col: "Wi-Fi Signal Strength (dBm)",
+                "detected_location_accuracy": "Google API Precision Radius (meters)",
+                "is_mobile_hotspot": "Consumer Mobile Hotspot",
+            },
+            title="Wi-Fi Signal Strength (dBm) vs Google API Location Precision Radius",
+        )
+        fig.update_layout(
+            template="plotly_white", height=380, margin=dict(l=10, r=10, t=40, b=30)
+        )
+        return fig
 
-    #         gov_cols = [
-    #             c
-    #             for c in [
-    #                 "school_id_giga",
-    #                 "latitude",
-    #                 "longitude",
-    #                 "govt_latitude",
-    #                 "govt_longitude",
-    #             ]
-    #             if c in s_df.columns
-    #         ]
+    def plot_bssid_temporal_profile(self, school_id_giga: str) -> go.Figure:
+        """
+        Renders a stacked bar chart showing Operational Hours (08:00-19:59) vs
+        Out-of-Hours scan count for each BSSID registered to a facility.
+        """
+        profiles = self.build_bssid_profiles()
+        if profiles.empty:
+            fig = go.Figure()
+            fig.update_layout(title="No active BSSIDs found for this facility")
+            return fig
 
-    #         if "school_id_giga" in gov_cols:
-    #             s_subset = (
-    #                 s_df[gov_cols].drop_duplicates(subset=["school_id_giga"]).copy()
-    #             )
-    #             if (
-    #                 "latitude" in s_subset.columns
-    #                 and "govt_latitude" not in s_subset.columns
-    #             ):
-    #                 s_subset = s_subset.rename(
-    #                     columns={
-    #                         "latitude": "govt_latitude",
-    #                         "longitude": "govt_longitude",
-    #                     }
-    #                 )
+        fac_prof = profiles[profiles["school_id_giga"] == school_id_giga].copy()
+        if fac_prof.empty:
+            fig = go.Figure()
+            fig.update_layout(title=f"No BSSID profiles recorded for {school_id_giga}")
+            return fig
 
-    #             # Drop existing govt columns to prevent suffix collisions (_x, _y)
-    #             valid_geo = valid_geo.drop(
-    #                 columns=[
-    #                     c
-    #                     for c in ["govt_latitude", "govt_longitude"]
-    #                     if c in valid_geo.columns
-    #                 ]
-    #             )
-    #             valid_geo = valid_geo.merge(
-    #                 s_subset[["school_id_giga", "govt_latitude", "govt_longitude"]],
-    #                 on="school_id_giga",
-    #                 how="left",
-    #             )
+        fig = go.Figure()
+        fig.add_trace(
+            go.Bar(
+                y=fac_prof["detected_wifi_bssid"],
+                x=fac_prof["operational_hours_obs"],
+                name="Operational Hours (08:00-19:59)",
+                orientation="h",
+                marker=dict(color="#2ca02c"),
+            )
+        )
+        fig.add_trace(
+            go.Bar(
+                y=fac_prof["detected_wifi_bssid"],
+                x=fac_prof["out_of_hours_obs"],
+                name="Out-of-Hours (20:00-07:59)",
+                orientation="h",
+                marker=dict(color="#d62728"),
+            )
+        )
 
-    #     # Option B: Map pre-existing `latitude`/`longitude` in self.df if govt_latitude is missing
-    #     if "govt_latitude" not in valid_geo.columns and "latitude" in valid_geo.columns:
-    #         valid_geo = valid_geo.rename(
-    #             columns={"latitude": "govt_latitude", "longitude": "govt_longitude"}
-    #         )
-
-    #     # -------------------------------------------------------------------
-    #     # Step 2: Calculate Weighted Centroids and Facility Summaries
-    #     # -------------------------------------------------------------------
-
-    #     summaries = []
-    #     grouped = valid_geo.groupby("school_id_giga")
-
-    #     for school_id, group in grouped:
-    #         lats = group["detected_latitude"].values
-    #         lons = group["detected_longitude"].values
-    #         accuracies = group["detected_location_accuracy"].values
-
-    #         # Accuracy-Weighted Spatial Centroid: w_i = 1 / (accuracy_i^2)
-    #         weights = 1.0 / np.square(np.maximum(accuracies, 1.0))
-    #         weighted_lat = float(np.sum(lats * weights) / np.sum(weights))
-    #         weighted_lon = float(np.sum(lons * weights) / np.sum(weights))
-
-    #         coord_tuples = _extract_coord_tuples(group)
-
-    #         # Identify official government coordinates for this facility
-    #         govt_lat = group["govt_latitude"].dropna().iloc[0]
-    #         govt_lon = group["govt_longitude"].dropna().iloc[0]
-
-    #         # Compute Haversine Displacement against Government Registry Pin
-    #         govt_disp_m = haversine_distance_meters(
-    #             weighted_lat, weighted_lon, govt_lat, govt_lon
-    #         )
-
-    #         summaries.append(
-    #             {
-    #                 "school_id_giga": school_id,
-    #                 "total_valid_geo_records": len(group),
-    #                 "ambient_scan_count": int(
-    #                     group["detected_wifi_bssid"].isna().sum()
-    #                 ),
-    #                 "bssid_scan_count": int(group["detected_wifi_bssid"].notna().sum()),
-    #                 "distinct_devices": int(group["device_id"].nunique()),
-    #                 "empirical_centroid_lat": weighted_lat,
-    #                 "empirical_centroid_lon": weighted_lon,
-    #                 "govt_latitude": govt_lat,
-    #                 "govt_longitude": govt_lon,
-    #                 "govt_displacement_m": (
-    #                     round(govt_disp_m, 2) if pd.notna(govt_disp_m) else np.nan
-    #                 ),
-    #                 "mean_accuracy_m": round(
-    #                     float(group["detected_location_accuracy"].mean()), 2
-    #                 ),
-    #                 "coord_tuples": coord_tuples,
-    #             }
-    #         )
-
-    #     summary_df = pd.DataFrame(summaries)
-    #     return summary_df.sort_values(by="total_valid_geo_records", ascending=False)
+        fig.update_layout(
+            barmode="stack",
+            title=f"BSSID Temporal Profile for Facility: {school_id_giga}",
+            xaxis=dict(title="Observation Count"),
+            yaxis=dict(title="BSSID MAC Address", autorange="reversed"),
+            template="plotly_white",
+            height=350,
+            margin=dict(l=10, r=10, t=40, b=30),
+        )
+        return fig

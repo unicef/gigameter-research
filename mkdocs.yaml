@@ -1,0 +1,118 @@
+site_name: Research Hub
+site_description: Spatial Geofencing & Telemetry Analytics Platform
+site_author: Utku Can Ozturk
+
+theme:
+  name: material
+  palette:
+    # Dark Mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Light Mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+  features:
+    - navigation.tabs
+    - navigation.indexes
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - content.tabs.link
+    - code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+    - search.share
+    - toc.follow
+
+  logo: gigameter_white.svg
+  favicon: giga_horizontal_bicolor.svg
+  
+repo_name: unicef/gigameter-research
+site_url: https://unicef.github.io/gigameter-research/
+edit_uri: edit/main/docs/
+
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/unicef/gigameter-research
+  generator: false
+  
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+extra_css:
+  - stylesheets/cards.css
+
+nav:
+  - Welcome: index.md
+
+  - Spatial & Geofencing:
+      - Pillars:
+        - Mobility Trajectories: spatial/pillar-1-mobility.md
+        - Geolocation Quality: spatial/pillar-2-quality.md
+        - Govt Map Validation: spatial/pillar-3-validation.md
+      - Blueprints:
+        - Spatial & Geofencing Blueprint: blueprint/technical_blueprint.md
+      - Python API Reference:
+        - SpatialProfiler: api/profiler.md
+        - MobilityAnalyzer: api/mobility.md
+        - FacilityValidator: api/validator.md
+  
+  - Outages & Connectivity:
+      - Pillars:
+        - 4-State Outage Models: connectivity/outage-models.md
+  
+  - Diagnostics & Routing:
+      - Pillars:
+        - Traceroutes & BBR: diagnostics/routing.md
+  
+
+
+copyright: Copyright &copy; UNICEF Giga 2026

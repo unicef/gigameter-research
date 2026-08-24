@@ -20,6 +20,7 @@ dev/
 data/
 metadata/
 .agents/
+.claude/
 
 # Data files
 *.csv
@@ -42,6 +43,7 @@ CONTEXT.md
 ADR.md
 .antigravityignore
 .cursorrules
+.geminiignore
 
 # tests
 *.ipynb

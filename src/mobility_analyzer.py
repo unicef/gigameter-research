@@ -245,7 +245,7 @@ class MobilityAnalyzer:
                 lat=[school_lat],
                 lon=[school_lon],
                 mode="markers+text",
-                marker=dict(size=18, color="red", symbol="hospital"),
+                marker=dict(size=18, color="red"),
                 text=["Facility Anchor"],
                 textposition="top center",
                 name="Facility Anchor",
@@ -292,4 +292,87 @@ class MobilityAnalyzer:
             annotation_text=f"Geofence ({int(self.geofence_radius_m)}m)",
         )
         fig.update_layout(template="plotly_white")
+        return fig
+
+    def plot_commuter_time_of_day_scatter(self, device_id: str) -> go.Figure:
+        """
+        Renders a scatter plot mapping Local Hour of Day (0-23) vs Displacement (meters),
+        colored by DBSCAN spatial cluster ID.
+        """
+        analysis = self.analyze_device_mobility(device_id)
+        if "error" in analysis:
+            fig = go.Figure()
+            fig.update_layout(title=f"Error analyzing device: {device_id}")
+            return fig
+
+        df_dev = analysis["processed_df"].copy()
+        if (
+            "local_hour" not in df_dev.columns
+            and "local_created_timestamp" in df_dev.columns
+        ):
+            df_dev["local_hour"] = pd.to_datetime(
+                df_dev["local_created_timestamp"]
+            ).dt.hour
+
+        df_dev["cluster_str"] = df_dev["cluster_id"].apply(
+            lambda x: "Outlier" if x == -1 else f"Cluster {x}"
+        )
+
+        fig = px.scatter(
+            df_dev,
+            x="local_hour",
+            y="displacement_m",
+            color="cluster_str",
+            size="detected_location_accuracy",
+            hover_data=["displacement_m", "is_operational_hours"],
+            labels={
+                "local_hour": "Local Hour of Day (0-23)",
+                "displacement_m": "Displacement from School Anchor (m)",
+            },
+            title=f"Time-of-Day Commuter Pattern — Device: {device_id} ({analysis['mobility_class']})",
+        )
+        fig.add_hline(
+            y=self.geofence_radius_m,
+            line_dash="dash",
+            line_color="orange",
+            annotation_text=f"Geofence ({int(self.geofence_radius_m)}m)",
+        )
+        fig.update_layout(template="plotly_white", height=450)
+        return fig
+
+    def plot_national_mobility_distribution(self) -> go.Figure:
+        """
+        Renders a national bar chart displaying the distribution of device mobility
+        classes (STATIONARY, COMMUTER, RELOCATED, HIGH_MOBILITY).
+        """
+        report = self.generate_facility_mobility_report()
+        if report.empty:
+            fig = go.Figure()
+            fig.update_layout(title="No mobility records available")
+            return fig
+
+        counts = report["mobility_class"].value_counts().reset_index()
+        counts.columns = ["mobility_class", "count"]
+
+        fig = px.bar(
+            counts,
+            x="mobility_class",
+            y="count",
+            color="mobility_class",
+            color_discrete_map={
+                "STATIONARY": "#2ca02c",
+                "COMMUTER": "#1f77b4",
+                "RELOCATED": "#ff7f0e",
+                "HIGH_MOBILITY": "#d62728",
+            },
+            text="count",
+            title="National Device Mobility Class Distribution (Pillar 1)",
+        )
+        fig.update_layout(
+            xaxis=dict(title="Mobility Class"),
+            yaxis=dict(title="Device Count"),
+            template="plotly_white",
+            height=400,
+            margin=dict(l=10, r=10, t=50, b=30),
+        )
         return fig
