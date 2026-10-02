@@ -1,5 +1,5 @@
 """
-Module: src/timezone_enricher.py
+Module: src/utils/timezone_enricher.py
 Purpose: Spatial timezone resolution and local time feature engineering
          for GigaMeter telemetry datasets (Pillars 1-5).
 Rules: GigaMeter Technical Specs v2.2 - Active Operational Hours (08:00 - 19:59 local time).
@@ -10,7 +10,6 @@ import numpy as np
 from timezonefinder import TimezoneFinder
 import pytz
 import pycountry
-from typing import Optional
 
 # Initialize TimezoneFinder once to reuse polygon spatial index in memory
 _tf = TimezoneFinder()
@@ -19,13 +18,13 @@ _tf = TimezoneFinder()
 def _resolve_single_school_tz(row: pd.Series) -> str:
     """
     Cascading resolution helper for a single school facility row:
-    1. Official Latitude/Longitude (Delta Share `schools` table)
+    1. Official government pins (`govt_latitude` / `govt_longitude`)
     2. Empirical Wi-Fi Lat/Lon (`detected_latitude` / `detected_longitude`)
     3. Country ISO3 Alpha-3 Fallback
     4. UTC
     """
-    # Tier 1: Official Static School Coordinates from Delta Share
-    latitude, longitude = row.get("latitude"), row.get("longitude")
+    # Tier 1: Official school coordinates already merged onto the frame
+    latitude, longitude = row.get("govt_latitude"), row.get("govt_longitude")
     if pd.notna(latitude) and pd.notna(longitude):
         try:
             tz = _tf.timezone_at(lat=float(latitude), lng=float(longitude))
@@ -60,44 +59,42 @@ def _resolve_single_school_tz(row: pd.Series) -> str:
     return "UTC"
 
 
-def build_school_timezone_map(
-    telemetry_df: pd.DataFrame, schools_df: Optional[pd.DataFrame] = None
-) -> dict:
+def build_school_timezone_map(telemetry_df: pd.DataFrame) -> dict:
     """
-    Constructs a dictionary mapping `giga_id_school` -> IANA Timezone string.
-    Deduplicates facilities first to optimize spatial lookup speed from O(N_rows) to O(N_schools).
+    Construct a dictionary mapping `school_id_giga` to an IANA timezone string.
+
+    The frame must already use canonical identifiers and, when official pins
+    are available, `govt_latitude` / `govt_longitude`. Facilities are
+    deduplicated first so spatial lookup is O(N_schools) rather than O(N_rows).
+
+    Args:
+        telemetry_df: Canonical telemetry, with school pins already merged.
+
+    Returns:
+        Mapping of `school_id_giga` to an IANA timezone name.
+
+    Raises:
+        ValueError: If `school_id_giga` is missing.
     """
-    # Standardize identifier anchoring (Section 1)
     df = telemetry_df.copy()
+    if "school_id_giga" not in df.columns:
+        raise ValueError("Telemetry frame is missing required column: school_id_giga")
 
-    if "giga_id_school" in df:
-        df = df.rename(columns={"giga_id_school": "school_id_giga"})
-
-    # Merge Delta Share school coordinates if provided
-    if schools_df is not None and not schools_df.empty:
-        df = df.merge(
-            schools_df[["school_id_giga", "latitude", "longitude"]],
-            on="school_id_giga",
-            how="left",
-        )
-
-    # Ensure required columns exist
     for col in [
         "detected_latitude",
         "detected_longitude",
-        "latitude",
-        "longitude",
+        "govt_latitude",
+        "govt_longitude",
         "iso3_code",
     ]:
         if col not in df.columns:
             df[col] = np.nan
 
-    # Deduplicate by school ID to minimize spatial calculations
     unique_facilities = df[
         [
             "school_id_giga",
-            "latitude",
-            "longitude",
+            "govt_latitude",
+            "govt_longitude",
             "detected_latitude",
             "detected_longitude",
             "iso3_code",
@@ -116,35 +113,32 @@ def build_school_timezone_map(
 
 def enrich_telemetry_with_local_time(
     telemetry_df: pd.DataFrame,
-    schools_df: Optional[pd.DataFrame] = None,
     timestamp_col: str = "created_timestamp",
 ) -> pd.DataFrame:
     """
-    Main Pipeline Function:
-    1. Merges official school coordinates (`latitude`, `longitude`).
-    2. Builds spatial timezone mapping (`tz_name`).
-    3. Converts UTC timestamps to device local time.
-    4. Computes GigaMeter Active Operational Window (08:00 - 19:59 local device time).
+    Convert UTC telemetry timestamps into local device time.
+
+    Official school coordinates must already be on the frame as
+    `govt_latitude` and `govt_longitude`. This function maps each
+    `school_id_giga` to an IANA timezone, converts `timestamp_col` from UTC,
+    and sets the GigaMeter operational window (08:00-19:59 local time).
+
+    Args:
+        telemetry_df: Canonical telemetry frame.
+        timestamp_col: UTC timestamp column to convert.
+
+    Returns:
+        A copy of `telemetry_df` with `tz_name`, `created_timestamp_utc`,
+        `local_created_timestamp`, `local_date`, `local_hour`,
+        `local_day_of_week`, `is_weekday`, and `is_operational_hours`.
+
+    Raises:
+        ValueError: If `school_id_giga` is missing.
     """
     df = telemetry_df.copy()
+    if "school_id_giga" not in df.columns:
+        raise ValueError("Telemetry frame is missing required column: school_id_giga")
 
-    if "giga_id_school" in df:
-        df = df.rename(columns={"giga_id_school": "school_id_giga"})
-
-    # Step 1: Merge official school coordinates if provided
-    if schools_df is not None and not schools_df.empty:
-        # Avoid duplicate coordinate columns on merge
-        cols_to_drop = [c for c in ["latitude", "longitude"] if c in df.columns]
-        if cols_to_drop:
-            df = df.drop(columns=cols_to_drop)
-
-        df = df.merge(
-            schools_df[["school_id_giga", "latitude", "longitude"]],
-            on="school_id_giga",
-            how="left",
-        )
-
-    # Step 2: Build & Map Timezone
     tz_map = build_school_timezone_map(df)
     df["tz_name"] = df["school_id_giga"].map(tz_map).fillna("UTC")
 

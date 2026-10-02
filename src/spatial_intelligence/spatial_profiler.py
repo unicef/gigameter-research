@@ -5,15 +5,17 @@ Purpose: Spatial aggregation, BSSID fingerprinting, mobile hotspot detection,
 Rules: Aligned with GigaMeter Data Dictionary v2.2 (Pillars 1, 2, and 3).
 """
 
-import re
 import pandas as pd
 import numpy as np
 from enum import Enum
-from typing import Tuple, List, Dict, Any, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 import plotly.express as px
 import plotly.graph_objects as go
 
 from gigaspatial.processing import calculate_distance as haversine_distance_meters
+
+from src.utils.data_loader import TelemetryLoader
 
 
 class ClusterResolutionStrategy(Enum):
@@ -53,25 +55,50 @@ class SpatialProfiler:
         r"samsung|huawei|oppo|vivo|xiaomi|realme|mobicom|unitel|mifi)"
     )
 
-    def __init__(self, telemetry_df: pd.DataFrame):
-        self.df = telemetry_df.copy()
+    def __init__(
+        self,
+        telemetry_df: Optional[pd.DataFrame] = None,
+        *,
+        file_path: Optional[Union[str, Path]] = None,
+        query_name: Optional[str] = None,
+        query_params: Optional[Mapping[str, Any]] = None,
+        country_iso3: Optional[str] = None,
+        schools_df: Optional[pd.DataFrame] = None,
+        timestamp_col: str = "created_timestamp",
+        db: Any = None,
+        delta_store: Any = None,
+    ) -> None:
+        """
+        Load a canonical telemetry frame and tag mobile hotspots.
 
-        # Standardize primary identifiers
-        if "giga_id_school" in self.df.columns:
-            self.df = self.df.rename(columns={"giga_id_school": "school_id_giga"})
-        if "device_hardware_id" in self.df.columns:
-            self.df = self.df.rename(columns={"device_hardware_id": "device_id"})
+        Provide exactly one of `telemetry_df`, `file_path`, or `query_name`.
+        School-pin merge and local-time enrichment are performed by
+        `TelemetryLoader` before hotspot tagging. `is_operational_hours` is
+        read from that frame.
 
-        # Ensure operational hours flag exists (08:00 - 19:59 local device time)
-        if "is_operational_hours" not in self.df.columns:
-            if "is_school_hours" in self.df.columns:
-                self.df["is_operational_hours"] = self.df["is_school_hours"]
-            if "local_hour" in self.df.columns:
-                self.df["is_operational_hours"] = self.df["local_hour"].between(8, 19)
-            else:
-                self.df["is_operational_hours"] = True  # Default fallback
-
-        # Tag mobile hotspots and tethered connections
+        Args:
+            telemetry_df: In-memory measurements.
+            file_path: `.csv` or `.parquet` ledger path.
+            query_name: SQL template stem under `sql/`.
+            query_params: Placeholder values for the SQL template.
+            country_iso3: Country code used to load Delta school pins.
+            schools_df: Official school metadata used when govt pins are absent.
+            timestamp_col: UTC timestamp column used during local-time enrichment.
+            db: Optional database client. Built from `.env` when a query needs one.
+            delta_store: Optional Delta Sharing client. Built from `.env` when
+                school pins must be loaded.
+        """
+        self.df = TelemetryLoader().load(
+            telemetry_df=telemetry_df,
+            file_path=file_path,
+            query_name=query_name,
+            query_params=query_params,
+            country_iso3=country_iso3,
+            schools_df=schools_df,
+            timestamp_col=timestamp_col,
+            db=db,
+            delta_store=delta_store,
+        )
         self._tag_mobile_hotspots()
 
     def _tag_mobile_hotspots(self) -> None:
@@ -80,16 +107,8 @@ class SpatialProfiler:
         1. Case-insensitive SSID regex pattern matching.
         2. BSSID multi-day spatial drift (> 1000m across active days).
         """
-        ssid_col = (
-            "detected_wifi_ssid"
-            if "detected_wifi_ssid" in self.df.columns
-            else "detected_ssid"
-        )
-        bssid_col = (
-            "detected_wifi_bssid"
-            if "detected_wifi_bssid" in self.df.columns
-            else "detected_bssid"
-        )
+        ssid_col = "detected_wifi_ssid"
+        bssid_col = "detected_wifi_bssid"
 
         # 1. Regex SSID pattern match
         if ssid_col in self.df.columns:
@@ -139,27 +158,78 @@ class SpatialProfiler:
             self.df["is_hotspot_ssid"] | self.df["is_hotspot_drift"]
         )
 
+    def summarize_governance(self) -> Dict[str, Any]:
+        """
+        Summarize ledger quality for the governance metric cards.
+
+        Counts are taken from the full frame held by this profiler, including
+        rows without coordinates. Percentages are rounded to one decimal.
+        A zero row count yields 0.0, except `operational_hours_pct`, which is
+        100.0 when the flag is absent or there are no rows.
+
+        Returns:
+            Total records, ambient-scan and hotspot shares, mean location
+            accuracy in meters, and the operational-hours share.
+        """
+        total_records = len(self.df)
+        if (
+            "detected_wifi_bssid" in self.df.columns
+            and total_records > 0
+        ):
+            ambient_scans = int(self.df["detected_wifi_bssid"].isna().sum())
+        else:
+            ambient_scans = 0
+        ambient_pct = (
+            round((ambient_scans / total_records) * 100.0, 1)
+            if total_records > 0
+            else 0.0
+        )
+
+        if "detected_location_accuracy" in self.df.columns and total_records > 0:
+            mean_accuracy_m = round(
+                float(self.df["detected_location_accuracy"].mean()), 1
+            )
+        else:
+            mean_accuracy_m = 0.0
+
+        if "is_operational_hours" in self.df.columns and total_records > 0:
+            operational_hours_pct = round(
+                (self.df["is_operational_hours"].sum() / total_records) * 100.0, 1
+            )
+        else:
+            operational_hours_pct = 100.0
+
+        if "is_mobile_hotspot" in self.df.columns and total_records > 0:
+            hotspot_scans = int(self.df["is_mobile_hotspot"].sum())
+        else:
+            hotspot_scans = 0
+        hotspot_pct = (
+            round((hotspot_scans / total_records) * 100.0, 1)
+            if total_records > 0
+            else 0.0
+        )
+
+        return {
+            "total_records": total_records,
+            "ambient_scans": ambient_scans,
+            "ambient_pct": ambient_pct,
+            "mean_accuracy_m": mean_accuracy_m,
+            "operational_hours_pct": operational_hours_pct,
+            "hotspot_scans": hotspot_scans,
+            "hotspot_pct": hotspot_pct,
+        }
+
     def build_bssid_profiles(self) -> pd.DataFrame:
         """
         Pillar 2: BSSID-Level Infrastructure Profiling.
         Groups strictly by school and non-null BSSIDs.
         Extracts coordinate tuples and operational hours distributions.
         """
-        bssid_col = (
-            "detected_wifi_bssid"
-            if "detected_wifi_bssid" in self.df.columns
-            else "detected_bssid"
-        )
-        ssid_col = (
-            "detected_wifi_ssid"
-            if "detected_wifi_ssid" in self.df.columns
-            else "detected_ssid"
-        )
-        signal_col = (
-            "wifi_signal_dbm"
-            if "wifi_signal_dbm" in self.df.columns
-            else "detected_wifi_signal"
-        )
+        bssid_col = "detected_wifi_bssid"
+        ssid_col = "detected_wifi_ssid"
+        signal_col = "wifi_signal_dbm"
+        if bssid_col not in self.df.columns:
+            return pd.DataFrame()
 
         bssid_df = self.df[self.df[bssid_col].notna()].copy()
         if bssid_df.empty:
@@ -234,12 +304,21 @@ class SpatialProfiler:
 
     def build_facility_spatial_summary(
         self,
-        schools_df: Optional[pd.DataFrame] = None,
         strategy: ClusterResolutionStrategy = ClusterResolutionStrategy.GOVT_PROXIMITY_ANCHOR,
     ) -> pd.DataFrame:
         """
-        Pillars 1, 2 & 3: Strategy-Driven Facility Centroid Engine.
-        Uses valid API coordinates and resolves BSSID splits (> 2km) using the chosen strategy.
+        Resolve an empirical facility centroid for each school.
+
+        Uses valid API coordinates and the chosen strategy when BSSID splits
+        exceed 2 km. Official pins are read from `govt_latitude` and
+        `govt_longitude` already merged onto the telemetry frame.
+
+        Args:
+            strategy: Primary cluster selection mode for BSSID splits.
+
+        Returns:
+            One row per school with centroid, government displacement, and
+            hotspot diagnostics. Empty when no valid coordinates remain.
         """
         # Strict No-IP Fallback: Filter out null coordinates
         valid_geo = self.df[
@@ -249,66 +328,9 @@ class SpatialProfiler:
         if valid_geo.empty:
             return pd.DataFrame()
 
-        bssid_col = (
-            "detected_wifi_bssid"
-            if "detected_wifi_bssid" in valid_geo.columns
-            else "detected_bssid"
-        )
-
-        # -------------------------------------------------------------------
-        # Step 1: Resolve Official Government Coordinates
-        # -------------------------------------------------------------------
-        # Option A: Merge explicitly provided schools_df
-        if schools_df is not None and not schools_df.empty:
-            s_df = schools_df.copy()
-            if "giga_id_school" in s_df.columns:
-                s_df = s_df.rename(columns={"giga_id_school": "school_id_giga"})
-            gov_cols = [
-                c
-                for c in [
-                    "school_id_giga",
-                    "latitude",
-                    "longitude",
-                    "govt_latitude",
-                    "govt_longitude",
-                ]
-                if c in s_df.columns
-            ]
-
-            if "school_id_giga" in gov_cols:
-                s_subset = (
-                    s_df[gov_cols].drop_duplicates(subset=["school_id_giga"]).copy()
-                )
-                if (
-                    "latitude" in s_subset.columns
-                    and "govt_latitude" not in s_subset.columns
-                ):
-                    s_subset = s_subset.rename(
-                        columns={
-                            "latitude": "govt_latitude",
-                            "longitude": "govt_longitude",
-                        }
-                    )
-
-                valid_geo = valid_geo.drop(
-                    columns=[
-                        c
-                        for c in ["govt_latitude", "govt_longitude"]
-                        if c in valid_geo.columns
-                    ],
-                    errors="ignore",
-                )
-                valid_geo = valid_geo.merge(
-                    s_subset[["school_id_giga", "govt_latitude", "govt_longitude"]],
-                    on="school_id_giga",
-                    how="left",
-                )
-
-        # Option B: Map pre-existing `latitude`/`longitude` in self.df if govt_latitude is missing
-        if "govt_latitude" not in valid_geo.columns and "latitude" in valid_geo.columns:
-            valid_geo = valid_geo.rename(
-                columns={"latitude": "govt_latitude", "longitude": "govt_longitude"}
-            )
+        if "detected_wifi_bssid" not in valid_geo.columns:
+            valid_geo["detected_wifi_bssid"] = np.nan
+        bssid_col = "detected_wifi_bssid"
 
         summaries = []
         for school_id, group in valid_geo.groupby("school_id_giga"):
@@ -475,11 +497,7 @@ class SpatialProfiler:
         Renders a 2D Scatter/Density plot mapping Wi-Fi Signal Strength (dBm)
         against Google API Precision Radius (meters).
         """
-        signal_col = (
-            "wifi_signal_dbm"
-            if "wifi_signal_dbm" in self.df.columns
-            else "detected_wifi_signal"
-        )
+        signal_col = "wifi_signal_dbm"
         if (
             signal_col not in self.df.columns
             or "detected_location_accuracy" not in self.df.columns

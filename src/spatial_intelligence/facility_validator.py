@@ -7,16 +7,18 @@ Rules: Aligned with GigaMeter Data Dictionary v2.2 (08:00 - 19:59 Operational Wi
 
 import numpy as np
 import pandas as pd
-from typing import Optional, Dict, Any
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional, Union
 import plotly.express as px
 import plotly.graph_objects as go
 
-from src.spatial_profiler import (
+from .spatial_profiler import (
     SpatialProfiler,
     haversine_distance_meters,
     ClusterResolutionStrategy,
 )
-from src.mobility_analyzer import MobilityAnalyzer
+from .mobility_analyzer import MobilityAnalyzer
+from src.utils.data_loader import TelemetryLoader
 
 
 class FacilityValidator:
@@ -34,40 +36,70 @@ class FacilityValidator:
 
     def __init__(
         self,
-        telemetry_df: pd.DataFrame,
+        telemetry_df: Optional[pd.DataFrame] = None,
+        *,
+        file_path: Optional[Union[str, Path]] = None,
+        query_name: Optional[str] = None,
+        query_params: Optional[Mapping[str, Any]] = None,
+        country_iso3: Optional[str] = None,
         schools_df: Optional[pd.DataFrame] = None,
+        timestamp_col: str = "created_timestamp",
+        db: Any = None,
+        delta_store: Any = None,
         geofence_radius_m: float = 200.0,
         strategy: ClusterResolutionStrategy = ClusterResolutionStrategy.GOVT_PROXIMITY_ANCHOR,
-    ):
-        self.df = telemetry_df.copy()
-        self.schools_df = schools_df
+    ) -> None:
+        """
+        Load canonical telemetry and build the two-track facility audit.
+
+        Provide exactly one of `telemetry_df`, `file_path`, or `query_name`.
+        The spatial summary is built once and passed into the mobility engine.
+
+        Args:
+            telemetry_df: In-memory measurements.
+            file_path: `.csv` or `.parquet` ledger path.
+            query_name: SQL template stem under `sql/`.
+            query_params: Placeholder values for the SQL template.
+            country_iso3: Country code used to load Delta school pins.
+            schools_df: Official school metadata used when govt pins are absent.
+            timestamp_col: UTC timestamp column used during local-time enrichment.
+            db: Optional database client. Built from `.env` when a query needs one.
+            delta_store: Optional Delta Sharing client. Built from `.env` when
+                school pins must be loaded.
+            geofence_radius_m: Campus radius around the empirical centroid.
+            strategy: Primary cluster selection mode for BSSID splits.
+        """
+        self.df = TelemetryLoader().load(
+            telemetry_df=telemetry_df,
+            file_path=file_path,
+            query_name=query_name,
+            query_params=query_params,
+            country_iso3=country_iso3,
+            schools_df=schools_df,
+            timestamp_col=timestamp_col,
+            db=db,
+            delta_store=delta_store,
+        )
         self.geofence_radius_m = geofence_radius_m
         self.strategy = strategy
 
         # In-Memory Cache for National Audit Results
         self._national_audit_cache: Optional[pd.DataFrame] = None
 
-        # Standardize primary identifiers
-        if "giga_id_school" in self.df.columns:
-            self.df = self.df.rename(columns={"giga_id_school": "school_id_giga"})
-        if "device_hardware_id" in self.df.columns:
-            self.df = self.df.rename(columns={"device_hardware_id": "device_id"})
-
         # Strict No-IP Fallback: Filter out null coordinates
         self.valid_geo_df = self.df[
             self.df["detected_latitude"].notna() & self.df["detected_longitude"].notna()
         ].copy()
 
-        # Initialize underlying profilers
         self.spatial_profiler = SpatialProfiler(self.valid_geo_df)
         self.facility_summary = self.spatial_profiler.build_facility_spatial_summary(
-            schools_df=schools_df, strategy=strategy
+            strategy=strategy
         )
         self.mobility_analyzer = MobilityAnalyzer(
             telemetry_df=self.valid_geo_df,
-            schools_df=schools_df,
             geofence_radius_m=geofence_radius_m,
             strategy=strategy,
+            facility_summary=self.facility_summary,
         )
 
     def evaluate_facility_location_confidence(
@@ -181,12 +213,12 @@ class FacilityValidator:
             score_consensus = 12.5
 
         # Factor 3: BSSID Persistence (Max 20 pts)
-        bssid_col = (
-            "detected_wifi_bssid"
-            if "detected_wifi_bssid" in facility_records.columns
-            else "detected_bssid"
-        )
-        valid_bssids = facility_records[facility_records[bssid_col].notna()]
+        if "detected_wifi_bssid" in facility_records.columns:
+            valid_bssids = facility_records[
+                facility_records["detected_wifi_bssid"].notna()
+            ]
+        else:
+            valid_bssids = facility_records.iloc[0:0]
         score_bssid = (
             20.0
             if (not valid_bssids.empty and valid_bssids["local_date"].nunique() >= 3)
@@ -353,23 +385,77 @@ class FacilityValidator:
         self._national_audit_cache = audit_df
         return self._national_audit_cache
 
+    def summarize_national_audit(self) -> Dict[str, Any]:
+        """
+        Summarize the cached national audit for the executive metric cards.
+
+        Uses `run_national_facility_audit()` so a second call does not rebuild
+        the audit. An empty audit returns zeros. Stationary facilities are
+        those with `score_stability == 30.0`. Percentages and the mean
+        hardware score are rounded to one decimal.
+
+        Returns:
+            Facility counts by location flag, stationary-hardware share,
+            anomaly-tag counts, and the mean hardware health score.
+        """
+        audit_df = self.run_national_facility_audit()
+        empty = {
+            "total_facilities": 0,
+            "verified_accurate": 0,
+            "govt_pin_mismatch": 0,
+            "campus_dispersion": 0,
+            "stationary_facilities": 0,
+            "stationary_pct": 0.0,
+            "bssid_spatial_splits": 0,
+            "hotspot_tethered_facilities": 0,
+            "mean_hardware_health_score": 0.0,
+        }
+        if audit_df.empty:
+            return empty
+
+        total_facilities = len(audit_df)
+        if "score_stability" in audit_df.columns:
+            stationary_facilities = int((audit_df["score_stability"] == 30.0).sum())
+        else:
+            stationary_facilities = 0
+        flags = audit_df["location_verification_flag"]
+        tags = audit_df["hardware_anomaly_tags"]
+        return {
+            "total_facilities": total_facilities,
+            "verified_accurate": int((flags == "VERIFIED_ACCURATE").sum()),
+            "govt_pin_mismatch": int((flags == "GOVT_PIN_MISMATCH").sum()),
+            "campus_dispersion": int((flags == "CAMPUS_DISPERSION").sum()),
+            "stationary_facilities": stationary_facilities,
+            "stationary_pct": round(
+                (stationary_facilities / total_facilities) * 100.0, 1
+            ),
+            "bssid_spatial_splits": int(
+                tags.str.contains("BSSID_SPATIAL_SPLIT", na=False).sum()
+            ),
+            "hotspot_tethered_facilities": int(
+                tags.str.contains("HOTSPOT_TETHERED_FACILITY", na=False).sum()
+            ),
+            "mean_hardware_health_score": round(
+                float(audit_df["hardware_health_score"].mean()), 1
+            ),
+        }
+
     def plot_stationary_facility_percentage(self) -> go.Figure:
         """
         Calculates and plots the percentage of national facilities that have at least
         one STATIONARY monitoring device (`score_stability == 30.0`).
         Uses the cached national audit DataFrame for fast Streamlit rendering.
         """
-        audit_df = self.run_national_facility_audit()
-        if audit_df.empty:
+        summary = self.summarize_national_audit()
+        if summary["total_facilities"] == 0:
             raise ValueError(
                 "No valid facilities available for national mobility analysis."
             )
 
-        total_facilities = len(audit_df)
-        has_stationary = int((audit_df["score_stability"] == 30.0).sum())
+        total_facilities = summary["total_facilities"]
+        has_stationary = summary["stationary_facilities"]
         no_stationary = total_facilities - has_stationary
-
-        pct_stationary = round((has_stationary / total_facilities) * 100.0, 1)
+        pct_stationary = summary["stationary_pct"]
 
         labels = ["Anchored by Stationary Device", "Mobile / Commuter Only"]
         values = [has_stationary, no_stationary]
@@ -464,7 +550,7 @@ class FacilityValidator:
 
         fig.update_layout(
             title=dict(
-                text=f"Two-Track Engine Audit — {eval_res['school_name']}<br><sup>Location Flag: <b>{loc_flag}</b> | Anomaly Tags: <b>{tags_str}</b></sup>",
+                text=f"Two-Track Engine Audit - {eval_res['school_name']}<br><sup>Location Flag: <b>{loc_flag}</b> | Anomaly Tags: <b>{tags_str}</b></sup>",
                 x=0.01,
                 y=0.95,
                 font=dict(size=16),
@@ -529,11 +615,6 @@ class FacilityValidator:
             self.valid_geo_df["school_id_giga"] == school_id_giga
         ]
         if not fac_scans.empty:
-            bssid_col = (
-                "detected_wifi_bssid"
-                if "detected_wifi_bssid" in fac_scans.columns
-                else "detected_bssid"
-            )
             fig.add_trace(
                 go.Scattermapbox(
                     lat=fac_scans["detected_latitude"],
@@ -542,7 +623,11 @@ class FacilityValidator:
                     marker=dict(size=9, color="#1f77b4", opacity=0.6),
                     hoverinfo="text",
                     hovertext=fac_scans.apply(
-                        lambda r: f"Device: {r.get('device_id', 'N/A')}<br>BSSID: {r.get(bssid_col, 'Ambient Scan')}<br>Accuracy: {r.get('detected_location_accuracy', 0):.1f}m",
+                        lambda r: (
+                            f"Device: {r.get('device_id', 'N/A')}<br>"
+                            f"BSSID: {r.get('detected_wifi_bssid', 'Ambient Scan')}<br>"
+                            f"Accuracy: {r.get('detected_location_accuracy', 0):.1f}m"
+                        ),
                         axis=1,
                     ),
                     name="Individual Scans",
@@ -617,7 +702,7 @@ class FacilityValidator:
         fig.update_layout(
             title=dict(
                 text=(
-                    f"Confidence Breakdown — Location Score: {eval_res['location_confidence_score']}/100 | "
+                    f"Confidence Breakdown - Location Score: {eval_res['location_confidence_score']}/100 | "
                     f"Hardware Health: {eval_res['hardware_health_score']}/100 (Coherence Penalty: x{eval_res['p_coherence']})"
                 ),
                 x=0.01,
