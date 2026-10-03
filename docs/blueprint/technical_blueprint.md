@@ -130,7 +130,7 @@ graph TD
 ### 4.1 Overview & Data Ingestion Rules
 The `SpatialProfiler` module serves as the **foundational spatial processing engine**. It ingests raw telemetry measurements, standardizes facility identifiers (`school_id_giga`), enriches records with local device timestamps, and tags consumer mobile hotspots, and resolves empirical facility centroids using configurable strategy modes.
 #### Processing Rules:
-1. **Strict No-IP Fallback Policy:** The profiler strictly discards records where `detected_latitude` or `detected_longitude` is `null`. IP-based geolocation fallback is never applied.
+1. **No-IP Fallback Policy:** The profiler strictly discards records where `detected_latitude` or `detected_longitude` is `null`. IP-based fallback imputation is never attempted for these fields. While IP-derived geolocation coordinates are captured inside the nested `client_info` JSON blob for network-level diagnostics, they are explicitly ignored during spatial centroid modeling because they resolve to distant ISP routing hubs rather than the facility campus.
 2. **Operational Window Isolation:** Time-series telemetry is filtered strictly between 08:00:00 and 19:59:59 local device time (`is_operational_hours = True`) to prevent nighttime or off-hour device transport from skewing facility locations.
 3. **Consumer Hotspot & Drift Engine:**
     1. **SSID Regex Pattern Matching:** Passive and active SSIDs are evaluated against a consumer hotspot pattern:

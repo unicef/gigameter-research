@@ -21,6 +21,7 @@ data/
 metadata/
 .agents/
 .claude/
+.cursor/
 
 # Data files
 *.csv
@@ -43,6 +44,7 @@ CONTEXT.md
 ADR.md
 .antigravityignore
 .cursorrules
+.cursorignore
 .geminiignore
 
 # tests

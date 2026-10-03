@@ -7,16 +7,18 @@ Rules: Aligned with GigaMeter Data Dictionary v2.2 (08:00 - 19:59 Operational Wi
 
 import numpy as np
 import pandas as pd
-from typing import Optional, Dict, Any
+from pathlib import Path
+from typing import Optional, Dict, Any, Mapping, Union
 from sklearn.cluster import DBSCAN
 import plotly.express as px
 import plotly.graph_objects as go
 
-from src.spatial_profiler import (
+from .spatial_profiler import (
     SpatialProfiler,
     haversine_distance_meters,
     ClusterResolutionStrategy,
 )
+from src.utils.data_loader import TelemetryLoader
 
 
 class MobilityAnalyzer:
@@ -28,29 +30,68 @@ class MobilityAnalyzer:
 
     def __init__(
         self,
-        telemetry_df: pd.DataFrame,
+        telemetry_df: Optional[pd.DataFrame] = None,
+        *,
+        file_path: Optional[Union[str, Path]] = None,
+        query_name: Optional[str] = None,
+        query_params: Optional[Mapping[str, Any]] = None,
+        country_iso3: Optional[str] = None,
         schools_df: Optional[pd.DataFrame] = None,
+        timestamp_col: str = "created_timestamp",
+        db: Any = None,
+        delta_store: Any = None,
         geofence_radius_m: float = 200.0,
         strategy: ClusterResolutionStrategy = ClusterResolutionStrategy.GOVT_PROXIMITY_ANCHOR,
-    ):
-        self.df = telemetry_df.copy()
-        self.geofence_radius_m = geofence_radius_m
+        facility_summary: Optional[pd.DataFrame] = None,
+    ) -> None:
+        """
+        Load canonical telemetry and score device displacement from each school.
 
-        if "giga_id_school" in self.df.columns:
-            self.df = self.df.rename(columns={"giga_id_school": "school_id_giga"})
-        if "device_hardware_id" in self.df.columns:
-            self.df = self.df.rename(columns={"device_hardware_id": "device_id"})
+        Provide exactly one of `telemetry_df`, `file_path`, or `query_name`.
+        When `facility_summary` is provided it is used as the centroid table
+        and the spatial summary is not built again.
+
+        Args:
+            telemetry_df: In-memory measurements.
+            file_path: `.csv` or `.parquet` ledger path.
+            query_name: SQL template stem under `sql/`.
+            query_params: Placeholder values for the SQL template.
+            country_iso3: Country code used to load Delta school pins.
+            schools_df: Official school metadata used when govt pins are absent.
+            timestamp_col: UTC timestamp column used during local-time enrichment.
+            db: Optional database client. Built from `.env` when a query needs one.
+            delta_store: Optional Delta Sharing client. Built from `.env` when
+                school pins must be loaded.
+            geofence_radius_m: Campus radius around the empirical centroid.
+            strategy: Cluster resolution mode used when building a new summary.
+            facility_summary: Precomputed facility centroid table.
+        """
+        self.df = TelemetryLoader().load(
+            telemetry_df=telemetry_df,
+            file_path=file_path,
+            query_name=query_name,
+            query_params=query_params,
+            country_iso3=country_iso3,
+            schools_df=schools_df,
+            timestamp_col=timestamp_col,
+            db=db,
+            delta_store=delta_store,
+        )
+        self.geofence_radius_m = geofence_radius_m
 
         # Strict No-IP Fallback: Filter out missing coordinates
         self.valid_geo_df = self.df[
             self.df["detected_latitude"].notna() & self.df["detected_longitude"].notna()
         ].copy()
 
-        # Build empirical facility centroids
-        self.profiler = SpatialProfiler(self.valid_geo_df)
-        self.facility_summary = self.profiler.build_facility_spatial_summary(
-            schools_df=schools_df, strategy=strategy
-        )
+        if facility_summary is None:
+            self.profiler = SpatialProfiler(self.valid_geo_df)
+            self.facility_summary = self.profiler.build_facility_spatial_summary(
+                strategy=strategy
+            )
+        else:
+            self.profiler = None
+            self.facility_summary = facility_summary
 
         centroid_map_lat = dict(
             zip(
@@ -236,7 +277,7 @@ class MobilityAnalyzer:
                 "detected_location_accuracy",
                 "is_operational_hours",
             ],
-            title=f"Pillar 1 Spatial Mobility Audit — Device: {device_id} ({analysis['mobility_class']})",
+            title=f"Pillar 1 Spatial Mobility Audit - Device: {device_id} ({analysis['mobility_class']})",
             zoom=13,
             height=650,
         )
@@ -281,7 +322,7 @@ class MobilityAnalyzer:
             color_discrete_map={True: "#2ca02c", False: "#d62728"},
             size="detected_location_accuracy",
             hover_data=["displacement_m"],
-            title=f"Displacement Timeline from Facility Boundary — Device: {device_id}",
+            title=f"Displacement Timeline from Facility Boundary - Device: {device_id}",
             labels={time_col: "Local Timestamp", "displacement_m": "Displacement (m)"},
             height=450,
         )
@@ -329,7 +370,7 @@ class MobilityAnalyzer:
                 "local_hour": "Local Hour of Day (0-23)",
                 "displacement_m": "Displacement from School Anchor (m)",
             },
-            title=f"Time-of-Day Commuter Pattern — Device: {device_id} ({analysis['mobility_class']})",
+            title=f"Time-of-Day Commuter Pattern - Device: {device_id} ({analysis['mobility_class']})",
         )
         fig.add_hline(
             y=self.geofence_radius_m,
