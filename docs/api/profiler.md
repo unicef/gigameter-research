@@ -1,6 +1,6 @@
 # SpatialProfiler API Reference
 
-::: src.spatial_profiler.SpatialProfiler
+::: src.spatial_intelligence.spatial_profiler.SpatialProfiler
     options:
       members:
         - _tag_mobile_hotspots

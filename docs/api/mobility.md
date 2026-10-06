@@ -1,6 +1,6 @@
 # MobilityAnalyzer API Reference
 
-::: src.mobility_analyzer.MobilityAnalyzer
+::: src.spatial_intelligence.mobility_analyzer.MobilityAnalyzer
     options:
       members:
         - analyze_device_mobility

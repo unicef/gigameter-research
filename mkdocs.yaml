@@ -40,6 +40,7 @@ theme:
   favicon: giga_horizontal_bicolor.svg
   
 repo_name: unicef/gigameter-research
+repo_url: https://github.com/unicef/gigameter-research
 site_url: https://unicef.github.io/gigameter-research/
 edit_uri: edit/main/docs/
 
@@ -98,8 +99,11 @@ nav:
         - Mobility Trajectories: spatial/pillar-1-mobility.md
         - Geolocation Quality: spatial/pillar-2-quality.md
         - Govt Map Validation: spatial/pillar-3-validation.md
+        - Worked Examples: spatial/examples.md
       - Blueprints:
         - Spatial & Geofencing Blueprint: blueprint/technical_blueprint.md
+        - Methodology Parameters: blueprint/parameters.md
+        - Research Log: blueprint/research-log.md
       - Python API Reference:
         - SpatialProfiler: api/profiler.md
         - MobilityAnalyzer: api/mobility.md
