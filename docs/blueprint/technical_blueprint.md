@@ -47,7 +47,7 @@ Rows are converted to **fix events** per device, in time order:
 
 1. **Burst collapse:** Consecutive rows with the same fix within `burst_window_s` form one event.
 2. **Fresh repeat:** The same fix under the same BSSID after a longer gap is a new event. It adds support (another session or day) but the centroid weights each event once, not each row.
-3. **Carried fix:** The same fix as the previous row but under a different BSSID is marked `fix_carried = True`. It is excluded from BSSID mobility tests, BSSID centroids, and cluster support. It remains available to non-spatial analyses.
+3. **Carried fix:** Consecutive rows with the same fix form a *run*; the run's origin network is the first associated BSSID in it. A row whose BSSID differs from its run's origin network is marked `fix_carried = True`. It is excluded from BSSID mobility tests, BSSID centroids, and cluster support, and remains available to non-spatial analyses. Rows with no associated network are never carried and do not set the origin, because a device switching between cable and Wi-Fi in one place legitimately gets the same answer. Excluding a carried row loses no location: the same coordinates are already counted under the origin network.
 
 **Support** for a location is counted in distinct device-days of non-carried fix events, then distinct devices, then events.
 
