@@ -26,7 +26,22 @@ from src.utils.data_loader import (
 from .config import DEFAULT_CONFIG, STRATEGY_TELEMETRY_DOMINANCE, SpatialConfig
 from .geo import haversine_m, max_pairwise_distance_m
 from .mobility_analyzer import MobilityAnalyzer
-from .spatial_profiler import RESOLVED_BY_UNRESOLVED, SpatialProfiler
+from .palette import (
+    ACTION_COLORS,
+    ACTION_ORDER,
+    ANCHOR_COLOR,
+    CANDIDATE_COLOR,
+    CONFIDENCE_COLORS,
+    CONFIDENCE_ORDER,
+    FLAG_ORDER,
+    GEOFENCE_COLOR,
+    GOVT_PIN_COLOR,
+    MOBILITY_COLORS,
+    NOISE_COLOR,
+    OTHER_ENTITY_COLOR,
+)
+from .plot_utils import add_log_x_vline
+from .spatial_profiler import RESOLVED_BY_NAME_MATCH, RESOLVED_BY_UNRESOLVED, SpatialProfiler
 
 FLAG_VERIFIED = "VERIFIED_ACCURATE"
 FLAG_DISPERSION = "CAMPUS_DISPERSION"
@@ -545,8 +560,17 @@ class FacilityValidator:
             "stationary_pct": 0.0,
             "bssid_spatial_splits": 0,
             "hotspot_tethered_facilities": 0,
+            "commuter_device_facilities": 0,
+            "relocated_device_facilities": 0,
+            "coherence_penalised": 0,
+            "confidence_high": 0,
+            "confidence_medium": 0,
+            "confidence_low": 0,
             "strategy_agreement_pct": 0.0,
+            "resolved_by_name_match": 0,
+            "attribution_consistent": 0,
             "other_entity_nearby": 0,
+            "attribution_unresolved": 0,
             "mean_hardware_health_score": 0.0,
             **self.config.provenance(),
         }
@@ -557,6 +581,8 @@ class FacilityValidator:
         flags = audit_df["location_verification_flag"]
         actions = audit_df["recommended_action"]
         tags = audit_df["hardware_anomaly_tags"]
+        levels = audit_df["location_confidence_level"]
+        attribution = audit_df["entity_attribution_flag"]
         stationary = int((audit_df["score_stability"] == self.config.stability_points[0]).sum())
         summary.update({key: int((flags == flag).sum()) for flag, key in flag_keys.items()})
         summary.update({key: int((actions == action).sum()) for action, key in action_keys.items()})
@@ -569,12 +595,19 @@ class FacilityValidator:
                 "hotspot_tethered_facilities": int(
                     tags.str.contains("HOTSPOT_TETHERED_FACILITY", na=False).sum()
                 ),
+                "commuter_device_facilities": int(tags.str.contains("COMMUTER_DEVICE", na=False).sum()),
+                "relocated_device_facilities": int(tags.str.contains("RELOCATED_DEVICE", na=False).sum()),
+                "coherence_penalised": int((audit_df["p_coherence"] < 1.0).sum()),
+                "confidence_high": int((levels == "HIGH").sum()),
+                "confidence_medium": int((levels == "MEDIUM").sum()),
+                "confidence_low": int((levels == "LOW").sum()),
                 "strategy_agreement_pct": round(
-                    float(audit_df["strategy_agreement"].fillna(False).astype(bool).mean()) * 100.0, 1
+                    float(audit_df["strategy_agreement"].eq(True).mean()) * 100.0, 1
                 ),
-                "other_entity_nearby": int(
-                    (audit_df["entity_attribution_flag"] == ATTRIBUTION_OTHER_NEARBY).sum()
-                ),
+                "resolved_by_name_match": int((audit_df["anchor_resolved_by"] == RESOLVED_BY_NAME_MATCH).sum()),
+                "attribution_consistent": int((attribution == ATTRIBUTION_CONSISTENT).sum()),
+                "other_entity_nearby": int((attribution == ATTRIBUTION_OTHER_NEARBY).sum()),
+                "attribution_unresolved": int((attribution == ATTRIBUTION_UNRESOLVED).sum()),
                 "mean_hardware_health_score": round(float(audit_df["hardware_health_score"].mean()), 1),
             }
         )
@@ -594,111 +627,91 @@ class FacilityValidator:
         fig = go.Figure(
             data=[
                 go.Pie(
-                    labels=["Anchored by Stationary Device", "Mobile / Commuter Only"],
+                    labels=["Stationary device in scoring cluster", "No stationary device"],
                     values=[has_stationary, total - has_stationary],
                     hole=0.5,
-                    marker=dict(colors=["#2ca02c", "#ff7f0e"]),
-                    textinfo="label+percent",
+                    marker=dict(colors=[MOBILITY_COLORS["STATIONARY"], MOBILITY_COLORS["RELOCATED"]]),
+                    textinfo="percent",
                     hovertemplate="<b>%{label}</b><br>Facilities: %{value}<br>Share: %{percent}<extra></extra>",
                 )
             ]
         )
         fig.update_layout(
-            title=dict(
-                text=(
-                    "National Stationary Device Coverage<br>"
-                    f"<sup><b>{summary['stationary_pct']}%</b> ({has_stationary}/{total}) Facilities "
-                    "Monitored by Fixed Hardware</sup>"
-                ),
-                x=0.01,
-                y=0.95,
-                font=dict(size=16),
-            ),
             height=380,
-            margin=dict(l=20, r=20, t=70, b=20),
+            margin=dict(l=10, r=10, t=10, b=10),
             template="plotly_white",
             legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5),
         )
         return fig
 
-    def _tier_color(self, score: float, high: str) -> str:
-        level = self._confidence_level(score)
-        return {"HIGH": high, "MEDIUM": "#ff7f0e", "LOW": "#d62728"}[level]
-
-    def plot_track_comparison(self, school_id_giga: str) -> go.Figure:
-        """Side-by-side bars for the Track 1 score and the Track 2 hardware score."""
-        res = self.evaluate_facility_location_confidence(school_id_giga)
-        loc_score, hw_score = res["location_confidence_score"], res["hardware_health_score"]
-        tags_str = ", ".join(res["hardware_anomaly_tags"]) or "NONE"
-
-        fig = go.Figure(
-            go.Bar(
-                y=["Track 1: Location Truth", "Track 2: Hardware Health"],
-                x=[loc_score, hw_score],
-                orientation="h",
-                marker=dict(color=[self._tier_color(loc_score, "#2ca02c"), self._tier_color(hw_score, "#1f77b4")]),
-                text=[f"{loc_score:.1f} / 100", f"{hw_score:.1f} / 100"],
-                textposition="auto",
-                textfont=dict(size=14, color="white"),
-            )
-        )
-        fig.update_layout(
-            title=dict(
-                text=(
-                    f"Track Audit - {res['school_name']}<br><sup>Location: <b>{res['location_verification_flag']}</b> "
-                    f"({res['location_confidence_level']}, {res['recommended_action']}) | "
-                    f"Anomalies: <b>{tags_str}</b> | Attribution: <b>{res['entity_attribution_flag']}</b></sup>"
-                ),
-                x=0.01,
-                y=0.95,
-                font=dict(size=16),
-            ),
-            xaxis=dict(title="Score (0 - 100)", range=[0, 105]),
-            yaxis=dict(autorange="reversed"),
-            height=320,
-            margin=dict(l=10, r=20, t=70, b=40),
-            template="plotly_white",
-        )
-        return fig
-
-    def plot_facility_map(self, school_id_giga: str) -> go.Figure:
-        """
-        Map of the facility's fix events coloured by observation cluster, the
-        anchor centroid, unresolved candidate centroids, and the official pin.
-        """
-        res = self.evaluate_facility_location_confidence(school_id_giga)
+    def facility_cluster_table(self, school_id_giga: str) -> pd.DataFrame:
+        """Observation clusters of one facility, as built for anchor selection."""
         clusters = self.facility_clusters
-        clusters = (
-            clusters[clusters["school_id_giga"] == school_id_giga]
-            if clusters is not None and not clusters.empty
-            else pd.DataFrame()
-        )
+        if clusters is None or clusters.empty:
+            return pd.DataFrame()
+        return clusters[clusters["school_id_giga"] == school_id_giga].reset_index(drop=True)
+
+    def facility_event_table(self, school_id_giga: str) -> pd.DataFrame:
+        """
+        All fix events of one facility. `facility_cluster_id` is set for
+        events inside the anchor window and NaN for the rest.
+        """
         events = self.spatial_profiler.fix_events
-        events = events[events["school_id_giga"] == school_id_giga]
+        events = events[events["school_id_giga"] == school_id_giga].copy()
+        labelled = self.facility_events
+        if labelled is not None and not labelled.empty:
+            labelled = labelled.loc[
+                labelled["school_id_giga"] == school_id_giga, ["fix_event_id", "facility_cluster_id"]
+            ]
+            events = events.merge(labelled, on="fix_event_id", how="left")
+        else:
+            events["facility_cluster_id"] = np.nan
+        events["in_anchor_window"] = events["facility_cluster_id"].notna()
+        return events
+
+    def _nearest_other_pin(self, res: Dict[str, Any]) -> Optional[pd.Series]:
+        other_id = res.get("nearest_other_entity_id")
+        if other_id is None or self.entity_pins is None:
+            return None
+        match = self.entity_pins[self.entity_pins["school_id_giga"] == other_id]
+        return None if match.empty else match.iloc[0]
+
+    @staticmethod
+    def _circle(lat: float, lon: float, radius_m: float, points: int = 72) -> tuple:
+        angles = np.linspace(0, 2 * np.pi, points)
+        dlat = (radius_m / 6_371_000.0) * np.cos(angles)
+        dlon = (radius_m / 6_371_000.0) * np.sin(angles) / np.cos(np.radians(lat))
+        return lat + np.degrees(dlat), lon + np.degrees(dlon)
+
+    def plot_facility_map(self, school_id_giga: str, geofence_radius_m: Optional[float] = None) -> go.Figure:
+        """
+        Map of the facility's fix events coloured by observation cluster,
+        with the anchor, the strategy candidates, the official pin, the
+        nearest other entity pin, and an optional geofence circle.
+        """
+        res = self.evaluate_facility_location_confidence(school_id_giga)
+        clusters = self.facility_cluster_table(school_id_giga)
+        events = self.facility_event_table(school_id_giga)
         if events.empty:
             raise ValueError(f"Insufficient telemetry data for school: {school_id_giga}")
 
         fig = go.Figure()
-        labelled = self.facility_events
-        labelled = (
-            labelled[labelled["school_id_giga"] == school_id_giga]
-            if labelled is not None and not labelled.empty
-            else pd.DataFrame()
-        )
-        outside = events[~events["fix_event_id"].isin(labelled["fix_event_id"])] if not labelled.empty else events
+        outside = events[~events["in_anchor_window"]]
+        labelled = events[events["in_anchor_window"]]
         if not outside.empty:
             fig.add_trace(
-                go.Scattermapbox(
+                go.Scattermap(
                     lat=outside["detected_latitude"],
                     lon=outside["detected_longitude"],
                     mode="markers",
-                    marker=dict(size=7, color="#9e9e9e", opacity=0.5),
+                    marker=dict(size=7, color=NOISE_COLOR, opacity=0.5),
                     name="Outside anchor window",
                 )
             )
-        for cluster_id, group in labelled.groupby("facility_cluster_id") if not labelled.empty else []:
+        for cluster_id, group in labelled.groupby("facility_cluster_id"):
+            cluster_id = int(cluster_id)
             fig.add_trace(
-                go.Scattermapbox(
+                go.Scattermap(
                     lat=group["detected_latitude"],
                     lon=group["detected_longitude"],
                     mode="markers",
@@ -717,63 +730,125 @@ class FacilityValidator:
                 )
             )
 
-        if pd.notna(res["empirical_latitude"]):
+        has_anchor = pd.notna(res["empirical_latitude"])
+        if has_anchor and geofence_radius_m:
+            circle_lat, circle_lon = self._circle(
+                res["empirical_latitude"], res["empirical_longitude"], float(geofence_radius_m)
+            )
             fig.add_trace(
-                go.Scattermapbox(
+                go.Scattermap(
+                    lat=circle_lat,
+                    lon=circle_lon,
+                    mode="lines",
+                    line=dict(color=GEOFENCE_COLOR, width=2),
+                    name=f"Geofence ({geofence_radius_m:g} m)",
+                    hoverinfo="skip",
+                )
+            )
+        if not clusters.empty:
+            candidates = clusters[clusters["is_candidate"] & ~clusters["is_anchor_cluster"]]
+            if not candidates.empty:
+                fig.add_trace(
+                    go.Scattermap(
+                        lat=candidates["centroid_lat"],
+                        lon=candidates["centroid_lon"],
+                        mode="markers+text",
+                        marker=dict(size=16, color=CANDIDATE_COLOR),
+                        text=[f"Candidate {c}" for c in candidates["facility_cluster_id"]],
+                        textposition="top center",
+                        name="Other candidates",
+                    )
+                )
+        if has_anchor:
+            fig.add_trace(
+                go.Scattermap(
                     lat=[res["empirical_latitude"]],
                     lon=[res["empirical_longitude"]],
                     mode="markers+text",
-                    marker=dict(size=20, color="#2ca02c"),
+                    marker=dict(size=20, color=ANCHOR_COLOR),
                     text=["Anchor"],
                     textposition="top center",
-                    name="Facility Anchor",
-                )
-            )
-        elif not clusters.empty:
-            candidates = clusters[clusters["is_candidate"]]
-            fig.add_trace(
-                go.Scattermapbox(
-                    lat=candidates["centroid_lat"],
-                    lon=candidates["centroid_lon"],
-                    mode="markers+text",
-                    marker=dict(size=18, color="#ff7f0e"),
-                    text=[f"Candidate {c}" for c in candidates["facility_cluster_id"]],
-                    textposition="top center",
-                    name="Unresolved candidates",
+                    name="Facility anchor",
                 )
             )
         if pd.notna(res["govt_latitude"]):
             label = (
-                f"Govt Pin ({res['govt_displacement_m']}m)"
+                f"Official pin ({res['govt_displacement_m']:,.0f} m)"
                 if pd.notna(res["govt_displacement_m"])
-                else "Govt Pin"
+                else "Official pin"
             )
             fig.add_trace(
-                go.Scattermapbox(
+                go.Scattermap(
                     lat=[res["govt_latitude"]],
                     lon=[res["govt_longitude"]],
                     mode="markers+text",
-                    marker=dict(size=20, color="#d62728"),
+                    marker=dict(size=20, color=GOVT_PIN_COLOR),
                     text=[label],
                     textposition="bottom center",
-                    name="Official Government Pin",
+                    name="Official pin",
+                )
+            )
+        other = self._nearest_other_pin(res)
+        if other is not None:
+            fig.add_trace(
+                go.Scattermap(
+                    lat=[other["govt_latitude"]],
+                    lon=[other["govt_longitude"]],
+                    mode="markers+text",
+                    marker=dict(size=16, color=OTHER_ENTITY_COLOR),
+                    text=[f"Nearest other entity ({res['nearest_other_entity_distance_m']:,.0f} m)"],
+                    textposition="bottom center",
+                    hovertext=[f"{other.get('school_name', '')} ({other['school_id_giga']})"],
+                    name="Nearest other entity pin",
                 )
             )
 
-        center_lat = res["empirical_latitude"] if pd.notna(res["empirical_latitude"]) else events["detected_latitude"].median()
-        center_lon = res["empirical_longitude"] if pd.notna(res["empirical_longitude"]) else events["detected_longitude"].median()
-        tags_str = ", ".join(res["hardware_anomaly_tags"]) or "NONE"
+        center_lat = res["empirical_latitude"] if has_anchor else events["detected_latitude"].median()
+        center_lon = res["empirical_longitude"] if has_anchor else events["detected_longitude"].median()
         fig.update_layout(
-            mapbox=dict(style="open-street-map", center=dict(lat=center_lat, lon=center_lon), zoom=14),
-            title=dict(
-                text=f"Spatial Map: {res['school_name']} [{res['location_verification_flag']}] (Anomalies: {tags_str})",
-                x=0.01,
-                y=0.98,
-            ),
+            map=dict(style="open-street-map", center=dict(lat=center_lat, lon=center_lon), zoom=14),
             height=600,
-            margin=dict(l=10, r=10, t=40, b=10),
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+            margin=dict(l=0, r=0, t=0, b=0),
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)"),
         )
+        return fig
+
+    def plot_facility_evidence_timeline(self, school_id_giga: str) -> go.Figure:
+        """Fix events per local date and observation cluster, one row per cluster."""
+        events = self.facility_event_table(school_id_giga)
+        if events.empty:
+            raise ValueError(f"Insufficient telemetry data for school: {school_id_giga}")
+        res = self.evaluate_facility_location_confidence(school_id_giga)
+        anchor = res["anchor_cluster_id"]
+
+        def label(cluster_id: Any) -> str:
+            if pd.isna(cluster_id):
+                return "Outside anchor window"
+            cluster_id = int(cluster_id)
+            return f"Cluster {cluster_id} (anchor)" if cluster_id == anchor else f"Cluster {cluster_id}"
+
+        events["cluster_label"] = events["facility_cluster_id"].map(label)
+        daily = (
+            events.groupby(["local_date", "cluster_label"])
+            .agg(fix_events=("fix_event_id", "size"), devices=("device_id", "nunique"))
+            .reset_index()
+        )
+        daily["local_date"] = pd.to_datetime(daily["local_date"])
+        color_map = {name: NOISE_COLOR for name in daily["cluster_label"] if name == "Outside anchor window"}
+        color_map.update({name: ANCHOR_COLOR for name in daily["cluster_label"] if name.endswith("(anchor)")})
+        fig = px.scatter(
+            daily,
+            x="local_date",
+            y="cluster_label",
+            size="fix_events",
+            color="cluster_label",
+            color_discrete_map=color_map,
+            hover_data=["fix_events", "devices"],
+            size_max=14,
+            labels={"local_date": "Local date", "cluster_label": "Cluster", "fix_events": "Fix events"},
+            height=max(220, 60 * daily["cluster_label"].nunique() + 120),
+        )
+        fig.update_layout(template="plotly_white", showlegend=False, margin=dict(l=10, r=10, t=10, b=30))
         return fig
 
     def plot_score_breakdown(self, school_id_giga: str) -> go.Figure:
@@ -797,65 +872,103 @@ class FacilityValidator:
                 y=categories,
                 x=scores,
                 orientation="h",
-                marker=dict(color="#1f77b4"),
+                marker=dict(color=ANCHOR_COLOR),
                 text=[f"{s:g}/{m:g} pts" for s, m in zip(scores, max_scores)],
                 textposition="auto",
             )
         )
         fig.update_layout(
-            title=dict(
-                text=(
-                    f"Confidence Breakdown - Location Score: {res['location_confidence_score']}/100 | "
-                    f"Hardware Health: {res['hardware_health_score']}/100 (Coherence Penalty: x{res.get('p_coherence', 1.0)})"
-                ),
-                x=0.01,
-                y=0.98,
-            ),
-            xaxis=dict(title="Points Assigned", range=[0, max(max_scores) + 5]),
+            xaxis=dict(title="Points", range=[0, max(max_scores) + 5]),
             yaxis=dict(autorange="reversed"),
-            height=350,
-            margin=dict(l=10, r=10, t=40, b=30),
+            height=300,
+            margin=dict(l=10, r=10, t=10, b=30),
             template="plotly_white",
         )
         return fig
 
-    def plot_two_track_actionability_matrix(self) -> go.Figure:
-        """Scatter of Track 2 hardware score against Track 1 score, coloured by flag."""
+    def plot_location_triage(self) -> go.Figure:
+        """
+        Anchor distance to the official pin (log scale) against the Track 1
+        confidence score, coloured by recommended action. Vertical lines are
+        the distance bands, horizontal lines the confidence tiers.
+        """
+        audit_df = self.run_national_facility_audit()
+        plotted = audit_df[audit_df["govt_displacement_m"].notna()].copy() if not audit_df.empty else audit_df
+        if plotted.empty:
+            fig = go.Figure()
+            fig.update_layout(title="No facilities with both an anchor and an official pin")
+            return fig
+
+        plotted["distance_plot_m"] = plotted["govt_displacement_m"].clip(lower=1.0)
+        cfg = self.config
+        fig = px.scatter(
+            plotted,
+            x="distance_plot_m",
+            y="location_confidence_score",
+            color="recommended_action",
+            color_discrete_map=ACTION_COLORS,
+            category_orders={"recommended_action": ACTION_ORDER},
+            log_x=True,
+            hover_name="school_name",
+            hover_data={
+                "school_id_giga": True,
+                "location_verification_flag": True,
+                "govt_displacement_m": ":,.0f",
+                "location_confidence_level": True,
+                "distinct_devices": True,
+                "distance_plot_m": False,
+            },
+            labels={
+                "distance_plot_m": "Anchor distance to official pin (m, log scale)",
+                "location_confidence_score": "Location confidence score",
+                "recommended_action": "Action",
+                "location_verification_flag": "Flag",
+            },
+            height=440,
+        )
+        for x, name in ((cfg.verified_max_m, "verified"), (cfg.mismatch_min_m, "mismatch")):
+            add_log_x_vline(fig, x, f"{name} ({x:g} m)")
+        for y, name in ((cfg.confidence_high_min, "HIGH"), (cfg.confidence_medium_min, "MEDIUM")):
+            fig.add_hline(y=y, line_dash="dot", line_color="gray", annotation_text=f"{name} ({y:g})")
+        fig.update_traces(marker=dict(size=8, opacity=0.8))
+        fig.update_layout(
+            yaxis=dict(range=[0, 105]),
+            template="plotly_white",
+            margin=dict(l=10, r=10, t=30, b=30),
+            legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="left", x=0, title_text=""),
+        )
+        return fig
+
+    def plot_flag_confidence_breakdown(self) -> go.Figure:
+        """Facility counts per Track 1 flag, stacked by confidence tier."""
         audit_df = self.run_national_facility_audit()
         if audit_df.empty:
             fig = go.Figure()
             fig.update_layout(title="No national audit data available")
             return fig
 
-        fig = px.scatter(
-            audit_df,
-            x="hardware_health_score",
-            y="location_confidence_score",
-            color="location_verification_flag",
-            symbol="recommended_action",
-            hover_data=[
-                "school_id_giga",
-                "school_name",
-                "govt_displacement_m",
-                "hardware_anomaly_tags",
-                "entity_attribution_flag",
-            ],
-            labels={
-                "hardware_health_score": "Track 2: Hardware Health Score (0-100)",
-                "location_confidence_score": "Track 1: Location Confidence Score (0-100)",
-                "location_verification_flag": "Location Flag",
-            },
-            title="Track Actionability & Triage Matrix",
+        counts = (
+            audit_df.groupby(["location_verification_flag", "location_confidence_level"])
+            .size()
+            .reset_index(name="facilities")
         )
-        high = self.config.confidence_high_min
-        fig.add_vline(x=high, line_dash="dash", line_color="gray", annotation_text=f"HIGH ({high:g})")
-        fig.add_hline(y=high, line_dash="dash", line_color="gray", annotation_text=f"HIGH ({high:g})")
+        counts["flag"] = counts["location_verification_flag"].str.replace("_", " ").str.capitalize()
+        flag_order = [f.replace("_", " ").capitalize() for f in FLAG_ORDER]
+        fig = px.bar(
+            counts,
+            y="flag",
+            x="facilities",
+            color="location_confidence_level",
+            orientation="h",
+            color_discrete_map=CONFIDENCE_COLORS,
+            category_orders={"flag": flag_order, "location_confidence_level": CONFIDENCE_ORDER},
+            labels={"flag": "", "facilities": "Facilities", "location_confidence_level": "Confidence"},
+            height=440,
+        )
         fig.update_layout(
-            xaxis=dict(range=[0, 105]),
-            yaxis=dict(range=[0, 105]),
             template="plotly_white",
-            height=400,
-            margin=dict(l=10, r=10, t=50, b=30),
-            legend=dict(orientation="v", xanchor="right", yanchor="bottom", x=0.99, y=0.01, font=dict(size=8), title_text=""),
+            yaxis=dict(automargin=True),
+            margin=dict(l=10, r=10, t=10, b=30),
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="left", x=0),
         )
         return fig

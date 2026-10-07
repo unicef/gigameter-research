@@ -30,6 +30,7 @@ from .config import (
 from .fix_events import build_fix_event_table, mark_fix_events
 from .geo import dbscan_labels, haversine_m, max_pairwise_distance_m, weighted_centroid
 from .name_match import ssid_matches_name
+from .plot_utils import add_log_x_vline
 
 RESOLVED_BY_AGREEMENT = "strategy_agreement"
 RESOLVED_BY_SINGLE_STRATEGY = "single_strategy"
@@ -144,6 +145,7 @@ class SpatialProfiler:
         )
         self._tag_mobile_hotspots()
 
+        self._bssid_profiles: Optional[pd.DataFrame] = None
         self.facility_clusters: Optional[pd.DataFrame] = None
         self.facility_events: Optional[pd.DataFrame] = None
 
@@ -221,8 +223,10 @@ class SpatialProfiler:
         100.0 when the flag is absent or there are no rows.
 
         Returns:
-            Total records, ambient-scan and hotspot shares, mean location
-            accuracy in meters, and the operational-hours share.
+            Total records, ambient-scan and hotspot shares (split into SSID
+            pattern and moving router), mean and median location accuracy in
+            meters, the operational-hours share, fix-event and carried-row
+            counts, facility and device counts, and the local date range.
         """
         total_records = len(self.df)
 
@@ -245,15 +249,38 @@ class SpatialProfiler:
             else 100.0
         )
         hotspot_scans = int(self.df["is_mobile_hotspot"].sum()) if total_records > 0 else 0
+        hotspot_ssid_scans = int(self.df["is_hotspot_ssid"].sum()) if total_records > 0 else 0
+        mobile_bssid_scans = int(self.df["is_mobile_bssid"].sum()) if total_records > 0 else 0
+        median_accuracy_m = (
+            round(float(self.df["detected_location_accuracy"].median()), 1)
+            if "detected_location_accuracy" in self.df.columns and total_records > 0
+            else 0.0
+        )
+        rows = self.fix_event_rows
+        carried_scans = int(rows["fix_carried"].sum()) if not rows.empty else 0
+        dates = self.df["local_date"].dropna() if "local_date" in self.df.columns else pd.Series(dtype=object)
 
         return {
             "total_records": total_records,
             "ambient_scans": ambient_scans,
             "ambient_pct": pct(ambient_scans),
             "mean_accuracy_m": mean_accuracy_m,
+            "median_accuracy_m": median_accuracy_m,
             "operational_hours_pct": operational_hours_pct,
             "hotspot_scans": hotspot_scans,
             "hotspot_pct": pct(hotspot_scans),
+            "hotspot_ssid_scans": hotspot_ssid_scans,
+            "hotspot_ssid_pct": pct(hotspot_ssid_scans),
+            "mobile_bssid_scans": mobile_bssid_scans,
+            "mobile_bssid_pct": pct(mobile_bssid_scans),
+            "mobile_bssids": len(self.mobile_bssids),
+            "total_fix_events": int(len(self.fix_events)),
+            "carried_scans": carried_scans,
+            "carried_pct": pct(carried_scans),
+            "facilities": int(self.df["school_id_giga"].nunique()) if total_records > 0 else 0,
+            "devices": int(self.df["device_id"].nunique()) if "device_id" in self.df.columns else 0,
+            "first_date": dates.min() if not dates.empty else None,
+            "last_date": dates.max() if not dates.empty else None,
         }
 
     def build_bssid_profiles(self) -> pd.DataFrame:
@@ -265,6 +292,8 @@ class SpatialProfiler:
             operational-hours split, mean accuracy, hotspot and mobility flags,
             and the BSSID's coordinate tuples.
         """
+        if self._bssid_profiles is not None:
+            return self._bssid_profiles
         bssid_col = "detected_wifi_bssid"
         if bssid_col not in self.df.columns:
             return pd.DataFrame()
@@ -321,11 +350,12 @@ class SpatialProfiler:
                 }
             )
 
-        return (
+        self._bssid_profiles = (
             pd.DataFrame(profiles)
             .sort_values(by=["school_id_giga", "total_observations"], ascending=[True, False])
             .reset_index(drop=True)
         )
+        return self._bssid_profiles
 
     # ------------------------------------------------------------------
     # Facility observation clusters
@@ -336,7 +366,7 @@ class SpatialProfiler:
             return events.copy()
         mask = events["is_workday"].astype(bool)
         if "is_operational_hours" in events.columns:
-            mask &= events["is_operational_hours"].fillna(False).astype(bool)
+            mask &= events["is_operational_hours"].eq(True)
         return events[mask].copy()
 
     def _cluster_facility(
@@ -348,11 +378,12 @@ class SpatialProfiler:
             events["detected_latitude"], events["detected_longitude"], cfg.anchor_eps_m, 1
         )
         events["_device_day"] = list(zip(events["device_id"], events["local_date"]))
-        ssid_match = {
-            ssid: ssid_matches_name([ssid], school_name, cfg)
+        matching_ssids = [
+            ssid
             for ssid in events["detected_wifi_ssid"].dropna().unique()
-        }
-        events["_name_match"] = events["detected_wifi_ssid"].map(ssid_match).fillna(False).astype(bool)
+            if ssid_matches_name([ssid], school_name, cfg)
+        ]
+        events["_name_match"] = events["detected_wifi_ssid"].isin(matching_ssids)
         accuracy = events.get("detected_location_accuracy")
 
         rows = []
@@ -684,16 +715,79 @@ class SpatialProfiler:
             x=signal_col,
             y="detected_location_accuracy",
             color="is_mobile_hotspot",
-            color_discrete_map={True: "#d62728", False: "#1f77b4"},
+            color_discrete_map={True: "#c62828", False: "#1565c0"},
             opacity=0.6,
+            log_y=True,
             labels={
-                signal_col: "Wi-Fi Signal Strength (dBm)",
-                "detected_location_accuracy": "Google API Precision Radius (meters)",
-                "is_mobile_hotspot": "Consumer Mobile Hotspot",
+                signal_col: "Wi-Fi signal strength (dBm)",
+                "detected_location_accuracy": "Google accuracy radius (m, log scale)",
+                "is_mobile_hotspot": "Hotspot",
             },
-            title="Wi-Fi Signal Strength (dBm) vs Google API Location Precision Radius",
         )
-        fig.update_layout(template="plotly_white", height=380, margin=dict(l=10, r=10, t=40, b=30))
+        fig.update_layout(template="plotly_white", height=380, margin=dict(l=10, r=10, t=10, b=30))
+        return fig
+
+    def plot_accuracy_ecdf(self) -> go.Figure:
+        """
+        Cumulative share of rows by Google accuracy radius (log scale), with
+        the API-precision scoring bounds marked.
+        """
+        if "detected_location_accuracy" not in self.df.columns:
+            fig = go.Figure()
+            fig.update_layout(title="Accuracy radius unavailable in dataset")
+            return fig
+        accuracy = pd.to_numeric(self.df["detected_location_accuracy"], errors="coerce").dropna()
+        accuracy = accuracy.clip(lower=self.config.accuracy_floor_m)
+        fig = px.ecdf(
+            pd.DataFrame({"accuracy_m": accuracy}),
+            x="accuracy_m",
+            log_x=True,
+            labels={"accuracy_m": "Google accuracy radius (m, log scale)"},
+            height=380,
+        )
+        cfg = self.config
+        for x, name in ((cfg.precision_full_m, "full points"), (cfg.precision_zero_m, "zero points")):
+            add_log_x_vline(fig, x, f"{name} ({x:g} m)")
+        fig.update_layout(
+            template="plotly_white",
+            yaxis=dict(title="Share of rows", tickformat=".0%"),
+            margin=dict(l=10, r=10, t=10, b=30),
+        )
+        return fig
+
+    def plot_daily_coverage(self) -> go.Figure:
+        """Fix events and active devices per local date."""
+        events = self.fix_events
+        if events.empty or "local_date" not in events.columns:
+            fig = go.Figure()
+            fig.update_layout(title="No fix events available")
+            return fig
+        daily = (
+            events.groupby("local_date")
+            .agg(fix_events=("fix_event_id", "size"), devices=("device_id", "nunique"))
+            .reset_index()
+        )
+        daily["local_date"] = pd.to_datetime(daily["local_date"])
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=daily["local_date"], y=daily["fix_events"], name="Fix events", marker_color="#90caf9"))
+        fig.add_trace(
+            go.Scatter(
+                x=daily["local_date"],
+                y=daily["devices"],
+                name="Active devices",
+                yaxis="y2",
+                mode="lines",
+                line=dict(color="#1565c0", width=2),
+            )
+        )
+        fig.update_layout(
+            template="plotly_white",
+            height=380,
+            yaxis=dict(title="Fix events"),
+            yaxis2=dict(title="Active devices", overlaying="y", side="right", showgrid=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0),
+            margin=dict(l=10, r=10, t=30, b=30),
+        )
         return fig
 
     def plot_bssid_temporal_profile(self, school_id_giga: str) -> go.Figure:

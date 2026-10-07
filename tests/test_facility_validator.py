@@ -195,6 +195,12 @@ def test_national_audit_and_summary():
     assert summary["stationary_facilities"] == 2
     assert summary["bssid_spatial_splits"] == 1
     assert summary["strategy_agreement_pct"] == pytest.approx(66.7)
+    assert summary["commuter_device_facilities"] == 1
+    assert summary["coherence_penalised"] == 1
+    assert sum(summary[f"confidence_{level}"] for level in ("high", "medium", "low")) == 3
+    assert sum(
+        summary[key] for key in ("attribution_consistent", "other_entity_nearby", "attribution_unresolved")
+    ) == 3
 
     mobility = validator.mobility_analyzer.analyze_device_mobility("DEV_C")
     assert mobility["reference_source"] == "facility_anchor"
@@ -203,8 +209,17 @@ def test_national_audit_and_summary():
 def test_plots_render():
     validator = FacilityValidator(telemetry_df=pd.concat([example_a(), example_c()], ignore_index=True))
     for school in ("SCH_A", "SCH_C"):
-        assert validator.plot_facility_map(school).data
-        assert validator.plot_track_comparison(school).data
+        assert validator.plot_facility_map(school, geofence_radius_m=200).data
+        assert validator.plot_facility_evidence_timeline(school).data
         assert validator.plot_score_breakdown(school).data
-    assert validator.plot_two_track_actionability_matrix().data
+    assert validator.plot_location_triage().data
+    assert validator.plot_flag_confidence_breakdown().data
     assert validator.plot_stationary_facility_percentage().data
+    profiler = validator.spatial_profiler
+    assert profiler.plot_accuracy_ecdf().data
+    assert profiler.plot_daily_coverage().data
+    assert profiler.build_bssid_profiles() is profiler.build_bssid_profiles()
+
+    events = validator.facility_event_table("SCH_C")
+    assert events["in_anchor_window"].any()
+    assert set(validator.facility_cluster_table("SCH_C")["school_id_giga"]) == {"SCH_C"}

@@ -134,6 +134,13 @@ def test_geofence_override_and_cache():
     assert analyzer.analyze_device_mobility("DEV_A") is first
     assert first["compliance_rate_pct"] == 100.0
 
+    analyzer.set_geofence_radius(1.0)
+    narrowed = analyzer.analyze_device_mobility("DEV_A")
+    assert analyzer.config.geofence_radius_m == 1.0
+    assert narrowed["config_hash"] != first["config_hash"]
+    assert narrowed["compliance_rate_pct"] < first["compliance_rate_pct"]
+    assert narrowed["mobility_class"] == first["mobility_class"]
+
 
 def test_report_and_event_table_cover_all_devices():
     df = pd.concat([example_a(), example_c()], ignore_index=True)
@@ -155,6 +162,7 @@ def test_plots_render_for_each_example():
         analyzer.plot_device_mobility_map,
         analyzer.plot_displacement_timeline,
         analyzer.plot_commuter_time_of_day_scatter,
+        analyzer.plot_cluster_calendar,
     ):
         assert plot("DEV_C").data
     assert analyzer.plot_national_mobility_distribution().data

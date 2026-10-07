@@ -22,6 +22,7 @@ from src.utils.data_loader import TelemetryLoader
 from .config import DEFAULT_CONFIG, SpatialConfig
 from .fix_events import build_fix_event_table, mark_fix_events
 from .geo import NOISE_LABEL, dbscan_labels, haversine_m, weighted_centroid
+from .palette import ANCHOR_COLOR, GEOFENCE_COLOR, MOBILITY_COLORS
 
 MOBILITY_CLASSES = ("STATIONARY", "COMMUTER", "RELOCATED", "HIGH_MOBILITY")
 REFERENCE_FACILITY_ANCHOR = "facility_anchor"
@@ -122,6 +123,20 @@ class MobilityAnalyzer:
         self.fix_events = build_fix_event_table(fix_event_rows, config, marked=True)
 
         self._cache: Dict[Tuple[str, float, int], Dict[str, Any]] = {}
+
+    def set_geofence_radius(self, radius_m: float) -> None:
+        """
+        Change the geofence audit radius without rebuilding fix events.
+
+        Device classes do not depend on the radius; only the audit fields
+        and the provenance hash change.
+        """
+        radius_m = float(radius_m)
+        if radius_m == self.geofence_radius_m:
+            return
+        self.config = self.config.with_overrides(geofence_radius_m=radius_m)
+        self.geofence_radius_m = radius_m
+        self._cache.clear()
 
     def set_facility_anchors(self, facility_summary: Optional[pd.DataFrame]) -> None:
         """
@@ -413,7 +428,7 @@ class MobilityAnalyzer:
         hover = [c for c in ("device_id", "displacement_m", "detected_location_accuracy",
                              "detected_wifi_ssid", "row_count", "is_operational_hours")
                  if c in df_dev.columns]
-        fig = px.scatter_mapbox(
+        fig = px.scatter_map(
             df_dev,
             lat="detected_latitude",
             lon="detected_longitude",
@@ -421,24 +436,49 @@ class MobilityAnalyzer:
             size="marker_size",
             size_max=15,
             hover_data=hover,
-            title=f"Pillar 1 Spatial Mobility Audit - Device: {device_id} ({analysis['mobility_class']})",
             zoom=13,
-            height=650,
+            height=600,
+            map_style="open-street-map",
         )
         if analysis["reference_source"] is not None:
             label = self._reference_label(analysis)
             fig.add_trace(
-                go.Scattermapbox(
+                go.Scattermap(
                     lat=[df_dev["facility_centroid_lat"].iloc[0]],
                     lon=[df_dev["facility_centroid_lon"].iloc[0]],
                     mode="markers+text",
-                    marker=dict(size=18, color="red"),
+                    marker=dict(size=18, color=ANCHOR_COLOR),
                     text=[label],
                     textposition="top center",
                     name=label,
                 )
             )
-        fig.update_layout(mapbox_style="open-street-map", margin=dict(l=10, r=10, t=50, b=10))
+        fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+        return fig
+
+    def plot_cluster_calendar(self, device_id: str) -> go.Figure:
+        """Fix events per local date and cluster, to tell commuting from relocation."""
+        analysis = self.analyze_device_mobility(device_id)
+        if "error" in analysis:
+            raise ValueError(analysis["error"])
+
+        df_dev = analysis["processed_df"].copy()
+        df_dev["cluster_label"] = df_dev.apply(self._cluster_label, axis=1)
+        daily = (
+            df_dev.groupby(["local_date", "cluster_label"]).size().reset_index(name="fix_events")
+        )
+        daily["local_date"] = pd.to_datetime(daily["local_date"])
+        fig = px.scatter(
+            daily,
+            x="local_date",
+            y="cluster_label",
+            size="fix_events",
+            color="cluster_label",
+            size_max=14,
+            labels={"local_date": "Local date", "cluster_label": "Cluster", "fix_events": "Fix events"},
+            height=max(220, 70 * daily["cluster_label"].nunique() + 120),
+        )
+        fig.update_layout(template="plotly_white", showlegend=False, margin=dict(l=10, r=10, t=10, b=30))
         return fig
 
     def plot_displacement_timeline(self, device_id: str) -> go.Figure:
@@ -458,22 +498,23 @@ class MobilityAnalyzer:
             x=time_col,
             y="displacement_m",
             color=color_col,
-            color_discrete_map={True: "#2ca02c", False: "#d62728"},
+            color_discrete_map={True: "#2e7d32", False: "#c62828"},
             size="marker_size",
             hover_data=["displacement_m"],
-            title=(
-                f"Displacement from {self._reference_label(analysis)} - Device: {device_id}"
-            ),
-            labels={time_col: "Local Timestamp", "displacement_m": "Displacement (m)"},
-            height=450,
+            labels={
+                time_col: "Local timestamp",
+                "displacement_m": f"Distance from {self._reference_label(analysis).lower()} (m)",
+                color_col: color_col.replace("_", " ").capitalize(),
+            },
+            height=400,
         )
         fig.add_hline(
             y=self.geofence_radius_m,
             line_dash="dash",
-            line_color="orange",
-            annotation_text=f"Geofence ({int(self.geofence_radius_m)}m)",
+            line_color=GEOFENCE_COLOR,
+            annotation_text=f"Geofence ({int(self.geofence_radius_m)} m)",
         )
-        fig.update_layout(template="plotly_white")
+        fig.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=10, b=30))
         return fig
 
     def plot_commuter_time_of_day_scatter(self, device_id: str) -> go.Figure:
@@ -499,18 +540,18 @@ class MobilityAnalyzer:
             size="marker_size",
             hover_data=hover,
             labels={
-                "local_hour": "Local Hour of Day (0-23)",
-                "displacement_m": f"Displacement from {self._reference_label(analysis)} (m)",
+                "local_hour": "Local hour of day",
+                "displacement_m": f"Distance from {self._reference_label(analysis).lower()} (m)",
+                "cluster_str": "Cluster",
             },
-            title=f"Time-of-Day Commuter Pattern - Device: {device_id} ({analysis['mobility_class']})",
         )
         fig.add_hline(
             y=self.geofence_radius_m,
             line_dash="dash",
-            line_color="orange",
-            annotation_text=f"Geofence ({int(self.geofence_radius_m)}m)",
+            line_color=GEOFENCE_COLOR,
+            annotation_text=f"Geofence ({int(self.geofence_radius_m)} m)",
         )
-        fig.update_layout(template="plotly_white", height=450)
+        fig.update_layout(template="plotly_white", height=400, margin=dict(l=10, r=10, t=10, b=30))
         return fig
 
     def plot_national_mobility_distribution(self) -> go.Figure:
@@ -528,20 +569,16 @@ class MobilityAnalyzer:
             x="mobility_class",
             y="count",
             color="mobility_class",
-            color_discrete_map={
-                "STATIONARY": "#2ca02c",
-                "COMMUTER": "#1f77b4",
-                "RELOCATED": "#ff7f0e",
-                "HIGH_MOBILITY": "#d62728",
-            },
+            color_discrete_map=MOBILITY_COLORS,
+            category_orders={"mobility_class": list(MOBILITY_COLORS)},
             text="count",
-            title="National Device Mobility Class Distribution (Pillar 1)",
         )
         fig.update_layout(
-            xaxis=dict(title="Mobility Class"),
-            yaxis=dict(title="Device Count"),
+            xaxis=dict(title="Mobility class"),
+            yaxis=dict(title="Devices"),
             template="plotly_white",
-            height=400,
-            margin=dict(l=10, r=10, t=50, b=30),
+            height=380,
+            showlegend=False,
+            margin=dict(l=10, r=10, t=10, b=30),
         )
         return fig
