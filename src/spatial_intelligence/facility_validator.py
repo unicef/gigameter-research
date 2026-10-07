@@ -809,7 +809,7 @@ class FacilityValidator:
             map=dict(style="open-street-map", center=dict(lat=center_lat, lon=center_lon), zoom=14),
             height=600,
             margin=dict(l=0, r=0, t=0, b=0),
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)"),
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
         )
         return fig
 
