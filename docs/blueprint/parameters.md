@@ -22,7 +22,7 @@ The config checks ordering constraints when it is created, for example `verified
 | `workdays` | Mon–Fri | 0.3 | proposed | Anchor window |
 | `burst_window_s` | 300 | 0.3 | proposed | Fix events |
 | `accuracy_floor_m` | 1.0 | 0.2 | in use, calibrate | Centroid weights |
-| `min_support_device_days` | 2 | 0.3 | proposed | `INSUFFICIENT_DATA` |
+| `min_support_device_days` | 2 | 0.3 | proposed | Supported facility clusters, registry name match, `INSUFFICIENT_DATA` |
 
 ## Hotspot & BSSID Mobility
 
@@ -82,7 +82,7 @@ The config checks ordering constraints when it is created, for example `verified
 | `coherence_full_m` | 1000 | 0.2 | in use |
 | `split_m` | 2000 | 0.2 | in use |
 | `coherence_floor` | 0.1 | 0.2 | in use |
-| `hotspot_share_min` | 50% of non-carried fix events | 0.3 | in use (unit changed) |
+| `hotspot_share_min` | 50% of non-carried fix events | 0.3 | in use (unit changed); also excludes hotspot clusters from anchor candidates |
 
 ## Track 3: Entity Attribution
 

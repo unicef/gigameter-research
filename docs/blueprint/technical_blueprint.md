@@ -177,18 +177,19 @@ Geofence compliance is reported per device but never feeds its class. It is the 
 
 The facility is located from clusters of observations, not from BSSIDs. A BSSID can appear at more than one place, and many tests have no associated BSSID at all (wired or unassociated devices), so grouping by BSSID cannot separate locations.
 
-1. Run DBSCAN (`anchor_eps_m`) on the facility's anchor-window fix events from all devices, including events without a BSSID.
-2. Each cluster records its BSSIDs, SSIDs, devices, device-days, event count, hotspot share, and mean accuracy.
-3. Clusters dominated by hotspot events are excluded when a non-hotspot cluster exists.
-4. **Anti-blending invariant:** a centroid is only ever computed inside one cluster. No facility coordinate is an average across clusters.
+1. Run DBSCAN (`anchor_eps_m`, minimum one event) on the facility's anchor-window fix events from all devices, including events without a BSSID. Every event belongs to a cluster; support, not DBSCAN, decides which clusters count.
+2. Each cluster records its BSSIDs, SSIDs, devices, device-days, event count, hotspot share, mean accuracy, and distance to the official pin.
+3. A cluster is *supported* when it has at least `min_support_device_days` distinct device-days. Candidates are the supported clusters; when none is supported, all clusters are candidates and the anchor is reported with `anchor_supported = false`.
+4. Candidates whose hotspot share is at least `hotspot_share_min` are excluded when a non-hotspot candidate exists.
+5. **Anti-blending invariant:** a centroid is only ever computed inside one cluster. No facility coordinate is an average across clusters.
 
 ### 5.4 Strategy Candidates & Agreement
 
 Each strategy selects one candidate cluster. Ranking within a strategy is by support (device-days, then devices, then events).
 
-*   **`GOVT_PROXIMITY_ANCHOR`:** Highest-support cluster with its centroid within `govt_anchor_radius_m` of the official pin. Distance to the pin only breaks support ties. Falls back to `TELEMETRY_DOMINANCE` when no cluster is in range.
+*   **`GOVT_PROXIMITY_ANCHOR`:** Highest-support cluster with its centroid within `govt_anchor_radius_m` of the official pin. Distance to the pin only breaks support ties. Falls back to `TELEMETRY_DOMINANCE` when the facility has no pin (`no_govt_pin`) or no cluster is in range (`no_cluster_within_govt_anchor_radius`).
 *   **`TELEMETRY_DOMINANCE`:** Highest-support cluster, ignoring the pin.
-*   **`STATIONARY_FIRST`:** Highest-support cluster built only from events of `STATIONARY` devices and the dominant cluster of `COMMUTER` devices. Falls back to `TELEMETRY_DOMINANCE` when none exist.
+*   **`STATIONARY_FIRST`:** Highest-support cluster when support is counted only from events of `STATIONARY` devices and the dominant cluster of `COMMUTER` devices. Falls back to `TELEMETRY_DOMINANCE` when device classes are not provided (`no_device_classes`) or no such events exist (`no_stationary_evidence`).
 
 The default run evaluates `GOVT_PROXIMITY_ANCHOR` and `TELEMETRY_DOMINANCE`:
 
@@ -208,9 +209,19 @@ graph TD
     NM -->|No| AMB
 ```
 
-**Registry name match:** The registry name and SSID are lowercased, stripped of diacritics, and cleaned of generic tokens (`name_match_generic_tokens`, for example `shkolla`, `school`, grade labels, band suffixes such as `2.4g`). The match holds when every remaining token of the registry name appears in the SSID. It is used only to break a strategy disagreement and is always recorded.
+**Registry name match:** The registry name and SSID are lowercased, stripped of diacritics, and cleaned of generic tokens (`name_match_generic_tokens`, for example `shkolla`, `school`, grade labels, band suffixes such as `2.4g`). A number written directly before a generic token is dropped with it, so `9-vjeçare` and the `2` of `2.4g` do not count. An SSID matches when it contains every remaining token of the registry name; a registry name with no remaining token never matches.
 
-Every facility reports `anchor_cluster_id`, `anchor_bssids`, `strategy_candidates`, `strategy_agreement`, `anchor_resolved_by`, and `strategy_fallback_reason`.
+A cluster *name-matches* when matching SSIDs are seen on at least `min_support_device_days` of its device-days. A single reading of the facility's SSID at a staff member's home therefore does not make the home cluster match. The name match is used only to break a strategy disagreement and is always recorded.
+
+Every facility reports `anchor_cluster_id`, `anchor_bssids`, `strategy_candidates`, `candidate_govt_displacement_m`, `strategy_agreement`, `anchor_resolved_by`, and `strategy_fallback_reason`. `anchor_resolved_by` is one of:
+
+| Value | Meaning |
+| --- | --- |
+| `strategy_agreement` | All configured strategies chose the same cluster. |
+| `single_strategy` | Only one strategy is configured. |
+| `ssid_name_match` | Strategies disagreed; exactly one candidate name-matches. |
+| `unresolved` | Strategies disagreed and the name match did not decide. No anchor centroid is reported; candidate distances are. |
+| `no_cluster` | The facility has no anchor-window fix events. |
 
 ### 5.5 Accuracy-Weighted Centroid
 

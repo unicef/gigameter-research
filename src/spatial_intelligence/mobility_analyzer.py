@@ -123,6 +123,17 @@ class MobilityAnalyzer:
 
         self._cache: Dict[Tuple[str, float, int], Dict[str, Any]] = {}
 
+    def set_facility_anchors(self, facility_summary: Optional[pd.DataFrame]) -> None:
+        """
+        Use facility anchors as the geofence reference from now on.
+
+        Device classes do not change; cached results are dropped so the
+        audit fields are recomputed against the new reference.
+        """
+        self.facility_summary = facility_summary
+        self._anchors = self._anchor_lookup(facility_summary)
+        self._cache.clear()
+
     @staticmethod
     def _anchor_lookup(
         facility_summary: Optional[pd.DataFrame],

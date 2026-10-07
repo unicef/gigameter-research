@@ -27,6 +27,7 @@ Replaying v0.2 on one country ledger (summer 2026, about 9,200 rows from 245 dev
 | Device mobility runs before facility selection and does not use the facility centroid | A wrong centroid misclassified every device; it also made `STATIONARY_FIRST` impossible |
 | Facility anchor is one observation cluster; no averaging across clusters | Averages across locations produced points where no device had been |
 | Two strategies always run, with agreement and a registry-name tie-break | Strategy fallback was silent and the reported strategy was the requested one |
+| A cluster name-matches only when the facility's SSID is seen there on at least `min_support_device_days` device-days | In the commuter example a single non-carried reading of the school SSID sat in the home cluster, so both candidates matched and the tie-break could not decide |
 | Track 1 flag is set by distance; confidence is a separate tier with a recommended action | Low and medium scores hid large offsets |
 | Track 2 split measured between supported clusters | Stray readings and the no-BSSID group produced false splits |
 | Track 3 (entity attribution) added | No way to tell a wrong pin from telemetry recorded somewhere else |

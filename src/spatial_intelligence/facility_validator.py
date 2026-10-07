@@ -92,15 +92,15 @@ class FacilityValidator:
         ].copy()
 
         self.spatial_profiler = SpatialProfiler(self.valid_geo_df)
-        self.facility_summary = self.spatial_profiler.build_facility_spatial_summary(
-            strategy=strategy
-        )
         self.mobility_analyzer = MobilityAnalyzer(
             telemetry_df=self.valid_geo_df,
             geofence_radius_m=geofence_radius_m,
-            strategy=strategy,
-            facility_summary=self.facility_summary,
+            fix_event_rows=self.spatial_profiler.fix_event_rows,
         )
+        self.facility_summary = self.spatial_profiler.build_facility_spatial_summary(
+            device_events=self.mobility_analyzer.build_device_event_table()
+        )
+        self.mobility_analyzer.set_facility_anchors(self.facility_summary)
 
     def evaluate_facility_location_confidence(
         self, school_id_giga: str
@@ -275,10 +275,10 @@ class FacilityValidator:
         # Evaluates device reliability, mobile hotspots, and BSSID splits (> 2km)
         # -------------------------------------------------------------------
         max_bssid_dist_m = (
-            fac_sum["max_bssid_dist_m"].iloc[0] if not fac_sum.empty else 0.0
+            fac_sum["split_distance_m"].iloc[0] if not fac_sum.empty else 0.0
         )
         hotspot_scan_pct = (
-            fac_sum["hotspot_scan_pct"].iloc[0] if not fac_sum.empty else 0.0
+            fac_sum["hotspot_event_pct"].iloc[0] if not fac_sum.empty else 0.0
         )
 
         # Compute BSSID Coherence Penalty (P_coherence)
