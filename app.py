@@ -126,7 +126,6 @@ if df_telemetry is None or df_telemetry.empty:
 validator = FacilityValidator(
     telemetry_df=df_telemetry,
     geofence_radius_m=geofence_radius,
-    strategy=selected_strategy,
 )
 
 mobility_engine = MobilityAnalyzer(

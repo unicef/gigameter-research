@@ -286,17 +286,20 @@ graph TD
 
 **Confidence tier** (`location_confidence_level`) from S\_raw: `HIGH`, `MEDIUM`, `LOW`.
 
-**Recommended action** (`recommended_action`):
+**Recommended action** (`recommended_action`). Rules are checked in order and the first match wins:
 
-| Condition | Action |
-| --- | --- |
-| `GOVT_PIN_MISMATCH`, `HIGH`, anchor supported by 2+ devices | `SUBMIT_CORRECTION` |
-| `GOVT_PIN_MISMATCH` or `CAMPUS_DISPERSION` with `MEDIUM`, or any single-device anchor | `FIELD_VERIFY` |
-| Any flag with `LOW` | `AWAIT_DATA` |
-| `VERIFIED_ACCURATE`, `HIGH` or `MEDIUM` | `NONE` |
-| `AMBIGUOUS_MULTI_CLUSTER` | `FIELD_VERIFY` |
+| # | Condition | Action |
+| --- | --- | --- |
+| 1 | `INSUFFICIENT_DATA` or `UNSTABLE_MOBILE_ONLY` | `AWAIT_DATA` |
+| 2 | `AMBIGUOUS_MULTI_CLUSTER` | `FIELD_VERIFY` |
+| 3 | Confidence `LOW` | `AWAIT_DATA` |
+| 4 | `VERIFIED_ACCURATE` | `NONE` |
+| 5 | `GOVT_PIN_MISMATCH`, confidence `HIGH`, anchor seen by 2+ devices | `SUBMIT_CORRECTION` |
+| 6 | Anything else (`GOVT_PIN_MISMATCH`, `CAMPUS_DISPERSION`, `NO_GOVT_PIN_AVAILABLE`) | `FIELD_VERIFY` |
 
-`govt_displacement_m` is reported whenever an anchor and a pin exist, whatever the flag.
+**Scoring cluster.** S\_raw is computed on the anchor cluster. For `AMBIGUOUS_MULTI_CLUSTER`, which has no anchor, it is computed on the `TELEMETRY_DOMINANCE` candidate and reported as `score_cluster_id`.
+
+`govt_displacement_m` is reported whenever an anchor and a pin exist, whatever the flag. For `AMBIGUOUS_MULTI_CLUSTER`, `candidate_govt_displacement_m` gives each candidate's distance instead.
 
 A stationary single-device anchor proves the device does not move, not that it sits in the facility. This is why single-device mismatches route to `FIELD_VERIFY`.
 
@@ -331,41 +334,70 @@ Track 3 never changes the Track 1 flag. Its only interaction with Track 1 is the
 
 | Attribution Flag | Trigger |
 | --- | --- |
-| `CONSISTENT` | `ssid_name_match` is true, or this entity's pin is the nearest official pin to the anchor |
-| `OTHER_ENTITY_NEARBY` | Another entity's pin is within `other_entity_radius_m` of the anchor and no name match supports this entity |
-| `UNRESOLVED` | Neither signal is available |
+| `CONSISTENT` | `ssid_name_match` is true, or this entity's pin is the nearest official pin to the anchor and within `mismatch_min_m` of it |
+| `OTHER_ENTITY_NEARBY` | Not `CONSISTENT`, and another entity's pin is within `other_entity_radius_m` of the anchor |
+| `UNRESOLVED` | Neither, or the facility has no anchor |
 
-Track 3 needs the country school table from the same source the loader already reads. The canonical telemetry frame and its column contract do not change.
+The `mismatch_min_m` condition stops a far-off pin from counting as "nearest" only because no other pin is close.
+
+Track 3 needs the country table of official pins, loaded from the same Delta Sharing source the loader reads (`load_entity_pins`), or passed in directly. Without it only the pins of facilities in the telemetry are known, and `entity_pins_source` records which was used. The canonical telemetry frame and its column contract do not change.
 
 ## 7\. Output Schema
 
-```json title="Facility Evaluation Payload (v0.3 draft)"
+```json title="Facility Evaluation Payload (v0.3)"
 {
   "school_id_giga": "SCH_12345",
+  "school_name": "…",
   "methodology_version": "0.3",
   "config_hash": "…",
 
   "location_verification_flag": "GOVT_PIN_MISMATCH",
-  "location_confidence_score": 62.5,
+  "location_confidence_score": 62.7,
   "location_confidence_level": "MEDIUM",
   "recommended_action": "FIELD_VERIFY",
-  "govt_displacement_m": 14800.0,
-  "anchor_cluster_id": 2,
+  "govt_displacement_m": 14812.5,
+  "candidate_govt_displacement_m": {"govt_proximity_anchor": 14812.5, "telemetry_dominance": 14812.5},
+  "empirical_latitude": 0.0,
+  "empirical_longitude": 0.0,
+  "govt_latitude": 0.0,
+  "govt_longitude": 0.0,
+  "anchor_cluster_id": 0,
+  "anchor_supported": true,
   "anchor_bssids": ["…"],
-  "anchor_support_device_days": 3,
-  "strategy_candidates": {"govt_proximity_anchor": 2, "telemetry_dominance": 2},
+  "anchor_support_device_days": 2,
+  "anchor_support_devices": 1,
+  "score_cluster_id": 0,
+  "strategy_candidates": {"govt_proximity_anchor": 0, "telemetry_dominance": 0},
   "strategy_agreement": true,
   "anchor_resolved_by": "strategy_agreement",
-  "strategy_fallback_reason": "no_cluster_within_govt_anchor_radius",
+  "strategy_fallback_reason": "govt_proximity_anchor: no_cluster_within_govt_anchor_radius",
 
-  "hardware_health_score": 62.5,
+  "hardware_health_score": 62.7,
   "hardware_anomaly_tags": [],
+  "p_coherence": 1.0,
+  "split_distance_m": 0.0,
+  "hotspot_event_pct": 0.0,
 
   "entity_attribution_flag": "UNRESOLVED",
   "ssid_name_match": false,
-  "nearest_other_entity_distance_m": null
+  "nearest_other_entity_id": "…",
+  "nearest_other_entity_distance_m": 361.6,
+  "entity_pins_source": "delta_sharing",
+
+  "distinct_devices": 1,
+  "stationary_devices_count": 1,
+  "commuter_devices_count": 0,
+  "relocated_devices_count": 0,
+  "high_mobility_devices_count": 0,
+  "total_scans": 7,
+  "total_fix_events": 5,
+  "facility_device_days": 2,
+  "mean_accuracy_m": 35.2,
+  "score_breakdown": {"stability": 30.0, "consensus": 12.5, "bssid": 10.0, "depth": 3.0, "precision": 7.2}
 }
 ```
+
+`run_national_facility_audit()` returns one such row per facility, with `score_breakdown` flattened into `score_<component>` columns and `hardware_anomaly_tags` joined into a string (`NONE` when empty).
 
 ## 8\. Data Dictionary Rules
 

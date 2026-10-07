@@ -48,7 +48,7 @@ Identifiers, network names, MAC addresses, and coordinates are removed. Distance
 | Facility centroid | Facility network's rows mixed both locations; centroid about 1.9 km from the pin | Govt proximity picks the facility cluster; telemetry dominance picks the home cluster |
 | Device class | `COMMUTER` | `COMMUTER` |
 | Track 1 | `GOVT_PIN_MISMATCH`, score 75.8 | Strategies disagree; the registry name match picks the facility cluster: `CAMPUS_DISPERSION` (about 300 m), `anchor_resolved_by = ssid_name_match` |
-| Track 2 | `HOTSPOT_TETHERED_FACILITY` | `COMMUTER_DEVICE` |
+| Track 2 | `HOTSPOT_TETHERED_FACILITY` | `BSSID_SPATIAL_SPLIT` (home and facility clusters are both supported, about 3 km apart), `COMMUTER_DEVICE` |
 | Track 3 | — | `CONSISTENT` |
 
 **Why it is hard:** By volume, the home is the dominant location because the window spans a holiday. Without the name match the honest answer is `AMBIGUOUS_MULTI_CLUSTER`. A term calendar is not modelled in v0.3.

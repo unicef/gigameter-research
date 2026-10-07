@@ -1,7 +1,7 @@
 ## Pillar 3: Government Data Validation & Administrative Map Auditing
 
 !!! note "v0.3 draft"
-    This page describes the v0.3 design. Code still implements v0.2. Settings are on the [Parameters](../blueprint/parameters.md) page.
+    This page describes the v0.3 design, which the `FacilityValidator` code implements. Settings are on the [Parameters](../blueprint/parameters.md) page.
 
 ### 1\. Why This Pillar Exists
 
@@ -26,11 +26,12 @@ Telemetry can also be misleading: a device may be installed at a home or at anot
     *   `AMBIGUOUS_MULTI_CLUSTER`: Strategies chose different clusters and no name match resolves them.
     *   `UNSTABLE_MOBILE_ONLY`: No supported anchor cluster.
     *   `NO_GOVT_PIN_AVAILABLE`, `INSUFFICIENT_DATA`.
-*   **Recommended Actions:** `SUBMIT_CORRECTION` only for high-confidence, multi-device mismatches; `FIELD_VERIFY` for single-device or medium-confidence results; `AWAIT_DATA` for low confidence.
+*   **Recommended Actions:** `SUBMIT_CORRECTION` only for high-confidence mismatches seen by two or more devices; `NONE` for verified pins; `AWAIT_DATA` for low confidence or too little data; `FIELD_VERIFY` for everything else, including ambiguous and single-device results. The ordered rules are in [Blueprint Section 6.2](../blueprint/technical_blueprint.md#62-track-1-location-truth).
+*   **Track 3 Pins:** The country table of official pins is loaded from Delta Sharing so that pins of facilities without telemetry are also checked.
 
 ### 3\. Output Schema
 
-```json title="Facility Evaluation Payload (v0.3 draft)"
+```json title="Facility Evaluation Payload (v0.3, excerpt)"
 {
   "school_id_giga": "SCH_12345",
   "methodology_version": "0.3",

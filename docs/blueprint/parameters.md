@@ -70,7 +70,7 @@ The config checks ordering constraints when it is created, for example `verified
 | Parameter | Value | Since | Status |
 | --- | --- | --- | --- |
 | `verified_max_m` | 200 | 0.2 | in use |
-| `mismatch_min_m` | 500 | 0.2 | in use |
+| `mismatch_min_m` | 500 | 0.2 | in use; also the Track 3 limit for the facility's own pin |
 | Confidence `HIGH` | S\_raw &ge; 70 | 0.3 | proposed |
 | Confidence `MEDIUM` | 50 &le; S\_raw < 70 | 0.3 | proposed |
 | Confidence `LOW` | S\_raw < 50 | 0.3 | proposed |
