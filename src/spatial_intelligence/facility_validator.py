@@ -148,13 +148,11 @@ class FacilityValidator:
             dev_analysis = self.mobility_analyzer.analyze_device_mobility(dev_id)
             if "error" not in dev_analysis:
                 device_mobility_classes.append(dev_analysis["mobility_class"])
-                dev_df = dev_analysis["processed_df"]
-                cluster_0 = dev_df[dev_df["cluster_id"] == 0]
-                if not cluster_0.empty:
+                if dev_analysis["dominant_cluster_id"] is not None:
                     primary_centroids.append(
                         (
-                            cluster_0["detected_latitude"].mean(),
-                            cluster_0["detected_longitude"].mean(),
+                            dev_analysis["dominant_centroid_lat"],
+                            dev_analysis["dominant_centroid_lon"],
                         )
                     )
 

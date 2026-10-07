@@ -2,7 +2,7 @@
 
 **Version:** <span style="background-color: #677eff; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">v0.3</span>
 
-**Status:** <span style="background-color: #e91e63; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Draft (design approved, code at v0.2)</span>
+**Status:** <span style="background-color: #e91e63; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Draft (design approved, code in progress)</span>
 
 **Maturity:** <span style="background-color: #b26a00; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Proposed Baseline</span>
 
@@ -17,7 +17,7 @@ The primary objective of this framework is to replace static, self-reported admi
 
 | Pillar Name | Primary Input Data | Core Methodologies | Primary Output / Operational Value |
 | ---| ---| ---| --- |
-| Pillar 1: Entity Geofencing & Mobility | Device fix events, `device_id`, local timestamps | Per-device DBSCAN on fix events, support by device-days, date interleaving | Mobility classification (`STATIONARY`, `COMMUTER`, `RELOCATED`, `HIGH_MOBILITY`) with a separate evidence level. |
+| Pillar 1: Entity Geofencing & Mobility | Device fix events, `device_id`, local timestamps | Per-device DBSCAN on fix events, support by device-days, cluster transitions | Mobility classification (`STATIONARY`, `COMMUTER`, `RELOCATED`, `HIGH_MOBILITY`) with a separate evidence level. |
 | Pillar 2: Geolocation Quality & Confidence | Google API resolved lat/lon, accuracy, BSSIDs, SSIDs | Fix events, BSSID mobility test, facility observation clusters, inverse-variance centroids, 5-factor score, BSSID Coherence Penalty | Facility anchor cluster, unpenalized location score (S\_raw), mobile hotspot tags, hardware health score. |
 | Pillar 3: Government Data Validation | Anchor centroid, official registry pins, registry names | Haversine displacement (D\_govt), strategy agreement, Three-Track Engine | Decoupled flags: location truth with confidence tier, hardware anomaly tags, entity attribution. |
 
@@ -99,7 +99,9 @@ graph TD
 *   **Pass 1: Input:** The device's non-carried fix events, all hours. Weekends are kept because they carry commuting and relocation signal.
 *   **Pass 2: DBSCAN:** Haversine metric on fix events with `device_eps_m` and `device_min_samples` (counted in events, not rows).
 *   **Pass 3: Support:** A cluster is *supported* when it spans at least `min_cluster_device_days` distinct days. Unsupported clusters are treated as noise.
-*   **Pass 4: Classification:** Uses the device's own supported clusters and their date ranges. Cluster labels carry no meaning; the dominant cluster is the one with the most support, not cluster `0`.
+*   **Pass 4: Classification:** Uses the device's own supported clusters and how often the device switches between them. Cluster labels carry no meaning; the dominant cluster is the one with the most support (device-days, then events, then the earliest start), not cluster `0`.
+
+A *transition* is a change of supported cluster between two consecutive fix events of the device, in time order, ignoring noise events. A device that moves once and stays has one transition; a device that goes back and forth has many.
 
 ### 4.2 Classification Rules
 
@@ -108,7 +110,7 @@ graph TD
     IN["<div style='min-width: 450px; text-align: left;'><b>[ Device fix events ]</b></div>"]
     K{"Supported clusters?"}
     N{"Noise share &le; max_noise_share?"}
-    SEQ{"Date ranges overlap?"}
+    SEQ{"Transitions &ge; commuter_min_alternations?"}
 
     O1["<b>STATIONARY</b>"]
     O2["<b>COMMUTER</b>"]
@@ -121,18 +123,40 @@ graph TD
     N -->|Yes| O1
     N -->|No| O4
     K -->|2+| SEQ
-    SEQ -->|Interleaved &ge; commuter_min_alternations| O2
-    SEQ -->|Sequential| O3
+    SEQ -->|Yes: interleaved| O2
+    SEQ -->|No: sequential| O3
 ```
 
 | Mobility Class | Rule | Real-World Context |
 | ---| ---| --- |
 | `STATIONARY` | Exactly one supported cluster and noise share &le; `max_noise_share` | Fixed desktop or router-attached device. |
-| `COMMUTER` | Two or more supported clusters whose visits alternate across days | Staff laptop moved between the facility and home. |
-| `RELOCATED` | Two or more supported clusters in sequence (one ends before the next begins) | Equipment transferred, or facility moved. |
+| `COMMUTER` | Two or more supported clusters and at least `commuter_min_alternations` transitions | Staff laptop moved between the facility and home. |
+| `RELOCATED` | Two or more supported clusters and fewer transitions than `commuter_min_alternations` | Equipment transferred, or facility moved. |
 | `HIGH_MOBILITY` | No supported cluster, or noise share above the limit | Roaming hotspot, personal phone, field kit. |
 
 Mobility class and amount of evidence are separate fields. Each device also reports `evidence_device_days`, so a stationary device seen on 3 days and one seen on 60 days share a class but not an evidence level.
+
+### 4.3 Geofence Audit
+
+Geofence compliance is reported per device but never feeds its class. It is the share of the device's fix events within `geofence_radius_m` of a reference point. `reference_source` names that point:
+
+*   `facility_anchor`: the facility's anchor centroid (Section 5), used once the anchor is known.
+*   `device_dominant_cluster`: the centroid of the device's own dominant cluster, used when no anchor is available.
+*   Empty when the device has no supported cluster; compliance and displacement are then not computed.
+
+### 4.4 Device Output
+
+| Field | Meaning |
+| ---| --- |
+| `mobility_class` | One of the four classes above. |
+| `total_scans`, `carried_scans` | Telemetry rows with valid coordinates, and how many of them are carried. |
+| `total_fix_events` | Non-carried fix events used for clustering. |
+| `evidence_device_days` | Distinct local dates with at least one fix event. |
+| `cluster_count`, `supported_cluster_count` | DBSCAN clusters found, and how many are supported. |
+| `noise_share`, `cluster_transitions` | Inputs to the classification rules. |
+| `dominant_cluster_id`, `dominant_cluster_device_days`, `dominant_centroid_lat`, `dominant_centroid_lon` | The best-supported cluster and its accuracy-weighted centroid. |
+| `reference_source`, `compliance_rate_pct`, `max_displacement_m`, `median_displacement_m` | Geofence audit (Section 4.3). |
+| `methodology_version`, `config_hash` | Provenance of the settings used. |
 
 ## 5\. Pillar 2: SpatialProfiler Logic
 
@@ -344,6 +368,7 @@ Track 3 needs the country school table from the same source the loader already r
 *   **No term calendar:** School holidays are not modelled. Over a long holiday a staff laptop's home cluster can out-support the facility cluster, which surfaces as a strategy disagreement.
 *   **Fixed workdays:** `workdays` is one config value, not resolved per country.
 *   **Carried-fix cause:** Each test runs a fresh lookup and a failed lookup is not replaced by an earlier result, yet carried fixes are observed. Candidate causes are a Wi-Fi scan list returned from the operating system's cache (for example after sleep and resume) or caching of lookup results in the backend. Neither is confirmed, and the stored ledger does not include the nearby access-point list needed to tell them apart. The carried-fix rule is inferred from the data and does not depend on the cause. A lookup timestamp in the payload would make it observable; this is not planned for v0.3.
+*   **Stale but newly computed fixes:** The carried-fix rule only catches a fix that repeats an earlier answer exactly. If the first lookup after arriving at a new place returns a newly computed position for the previous place, nothing in the row tells it apart from a real reading. Such events stay in the evidence; they are usually single events, so support counting in device-days keeps them out of supported clusters.
 *   **SSID semantics:** SSIDs are user-set. Name matching is a tie-breaker and Track 3 evidence only.
 *   **Score double-count:** S\_bssid and S\_depth both reward active days. Kept unchanged pending calibration.
 

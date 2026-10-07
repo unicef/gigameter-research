@@ -1,7 +1,7 @@
 ## Pillar 1: Entity Geofencing & Mobility Trajectory Detection
 
 !!! note "v0.3 draft"
-    This page describes the v0.3 design. Code still implements v0.2. Settings are on the [Parameters](../blueprint/parameters.md) page.
+    This page describes the v0.3 design, which the `MobilityAnalyzer` code implements. Settings are on the [Parameters](../blueprint/parameters.md) page.
 
 ### 1\. Why This Pillar Exists
 
@@ -29,9 +29,9 @@ If telemetry from a roaming laptop is blindly assigned to a static school facili
 
     1. `STATIONARY`: One supported cluster with a low noise share.
 
-    2. `COMMUTER`: Two or more supported clusters visited in alternation across days.
+    2. `COMMUTER`: Two or more supported clusters, with the device switching between them at least `commuter_min_alternations` times.
 
-    3. `RELOCATED`: Two or more supported clusters in sequence.
+    3. `RELOCATED`: Two or more supported clusters with fewer switches, meaning the device moved and stayed.
 
     4. `HIGH_MOBILITY`: No supported cluster, or too much noise.
 
@@ -45,4 +45,4 @@ If telemetry from a roaming laptop is blindly assigned to a static school facili
 
 *   **Dominant Cluster:** The cluster with the most support. Cluster labels such as `0` carry no meaning.
 
-*   **Geofence Audit:** After the facility anchor is chosen (Pillar 2), each device's displacement from the anchor is reported as an audit. It no longer feeds classification.
+*   **Geofence Audit:** Each device's displacement from a reference point is reported as an audit and never feeds classification. The reference is the facility anchor (Pillar 2) when known, otherwise the device's dominant cluster; `reference_source` says which. See [Blueprint Section 4.3](../blueprint/technical_blueprint.md#43-geofence-audit).
