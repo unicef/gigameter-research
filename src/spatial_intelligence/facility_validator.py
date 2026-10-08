@@ -69,6 +69,7 @@ MOBILITY_COUNT_KEYS = {
     "COMMUTER": "commuter",
     "RELOCATED": "relocated",
     "HIGH_MOBILITY": "high_mobility",
+    "INSUFFICIENT_EVIDENCE": "insufficient_evidence",
 }
 
 

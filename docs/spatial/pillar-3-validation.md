@@ -1,7 +1,7 @@
 ## Pillar 3: Government Data Validation & Administrative Map Auditing
 
-!!! note "v0.3 draft"
-    This page describes the v0.3 design, which the `FacilityValidator` code implements. Settings are on the [Parameters](../blueprint/parameters.md) page.
+!!! note "v0.3"
+    This page describes the v0.3 methodology, which the `FacilityValidator` code implements. Settings are on the [Parameters](../blueprint/parameters.md) page.
 
 ### 1\. Why This Pillar Exists
 

@@ -108,6 +108,28 @@ def test_scattered_device_is_high_mobility():
     assert result["mobility_class"] == "HIGH_MOBILITY"
 
 
+@pytest.mark.parametrize(
+    "days, hours",
+    [
+        (1, (9, 11, 13, 15, 17)),  # many events on a single day
+        (2, (10,)),  # two days, fewer events than device_min_samples
+    ],
+)
+def test_thin_evidence_is_not_called_mobile(days, hours):
+    start = datetime(2026, 3, 2)
+    rows = [
+        row(school="SCH_X", device="DEV_T", when=(start + timedelta(days=d)).replace(hour=h),
+            point=offset(ORIGIN, d * 1.0, 0), accuracy=20.0, bssid=f"aa:00:00:00:02:{h:02x}",
+            ssid="Net", govt=ORIGIN, school_name="School X")
+        for d in range(days)
+        for h in hours
+    ]
+    _, result = _analyze(frame(rows), "DEV_T")
+
+    assert result["mobility_class"] == "INSUFFICIENT_EVIDENCE"
+    assert result["evidence_device_days"] == days
+
+
 def test_facility_anchor_is_the_audit_reference_when_given():
     df = example_c()
     summary = pd.DataFrame(

@@ -2,12 +2,12 @@
 
 **Version:** <span style="background-color: #677eff; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">v0.3</span>
 
-**Status:** <span style="background-color: #e91e63; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Draft (design approved, code in progress)</span>
+**Status:** <span style="background-color: #2e7d32; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Frozen</span>
 
-**Maturity:** <span style="background-color: #b26a00; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Proposed Baseline</span>
+**Maturity:** <span style="background-color: #b26a00; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Validated on Replay</span>
 
-!!! note "Draft status"
-    This page describes the v0.3 methodology. The modules under `src/spatial_intelligence/` still implement the previous version until the v0.3 code lands. Numeric settings are listed on the [Parameters](parameters.md) page; values marked *proposed* are starting points for calibration, not fixed rules. How the method got here is recorded in the [Research Log](research-log.md).
+!!! note "Scope"
+    This page describes the v0.3 methodology, which the modules under `src/spatial_intelligence/` implement. Numeric settings are listed on the [Parameters](parameters.md) page; values marked *calibrate* were checked on replay but rest on limited data. Replay results and the history of the method are recorded in the [Research Log](research-log.md).
 
 ## 1\. Objective
 
@@ -17,7 +17,7 @@ The primary objective of this framework is to replace static, self-reported admi
 
 | Pillar Name | Primary Input Data | Core Methodologies | Primary Output / Operational Value |
 | ---| ---| ---| --- |
-| Pillar 1: Entity Geofencing & Mobility | Device fix events, `device_id`, local timestamps | Per-device DBSCAN on fix events, support by device-days, cluster transitions | Mobility classification (`STATIONARY`, `COMMUTER`, `RELOCATED`, `HIGH_MOBILITY`) with a separate evidence level. |
+| Pillar 1: Entity Geofencing & Mobility | Device fix events, `device_id`, local timestamps | Per-device DBSCAN on fix events, support by device-days, cluster transitions | Mobility classification (`STATIONARY`, `COMMUTER`, `RELOCATED`, `HIGH_MOBILITY`, or `INSUFFICIENT_EVIDENCE`) with a separate evidence level. |
 | Pillar 2: Geolocation Quality & Confidence | Google API resolved lat/lon, accuracy, BSSIDs, SSIDs | Fix events, BSSID mobility test, facility observation clusters, inverse-variance centroids, 5-factor score, BSSID Coherence Penalty | Facility anchor cluster, unpenalized location score (S\_raw), mobile hotspot tags, hardware health score. |
 | Pillar 3: Government Data Validation | Anchor centroid, official registry pins, registry names | Haversine displacement (D\_govt), strategy agreement, Three-Track Engine | Decoupled flags: location truth with confidence tier, hardware anomaly tags, entity attribution. |
 
@@ -76,7 +76,7 @@ graph TD
 
 ### 3.2 Processing Sequence
 
-The chain stays one-way. `MobilityAnalyzer` no longer needs a facility summary; the profiler consumes device classes, which makes `STATIONARY_FIRST` possible. Geofence compliance against the anchor becomes an audit computed after Layer 2.
+The chain is one-way. `MobilityAnalyzer` does not need a facility summary; the profiler consumes device classes, which makes `STATIONARY_FIRST` possible. Geofence compliance against the anchor is an audit computed after Layer 2.
 
 ```mermaid
 graph TD
@@ -99,7 +99,8 @@ graph TD
 *   **Pass 1: Input:** The device's non-carried fix events, all hours. Weekends are kept because they carry commuting and relocation signal.
 *   **Pass 2: DBSCAN:** Haversine metric on fix events with `device_eps_m` and `device_min_samples` (counted in events, not rows).
 *   **Pass 3: Support:** A cluster is *supported* when it spans at least `min_cluster_device_days` distinct days. Unsupported clusters are treated as noise.
-*   **Pass 4: Classification:** Uses the device's own supported clusters and how often the device switches between them. Cluster labels carry no meaning; the dominant cluster is the one with the most support (device-days, then events, then the earliest start), not cluster `0`.
+*   **Pass 4: Evidence gate:** A device with fewer than `device_min_samples` fix events, or with fix events on fewer than `min_cluster_device_days` days, cannot form a supported cluster at all. It is classed `INSUFFICIENT_EVIDENCE` instead of being called mobile.
+*   **Pass 5: Classification:** Uses the device's own supported clusters and how often the device switches between them. Cluster labels carry no meaning; the dominant cluster is the one with the most support (device-days, then events, then the earliest start), not cluster `0`.
 
 A *transition* is a change of supported cluster between two consecutive fix events of the device, in time order, ignoring noise events. A device that moves once and stays has one transition; a device that goes back and forth has many.
 
@@ -108,6 +109,7 @@ A *transition* is a change of supported cluster between two consecutive fix even
 ```mermaid
 graph TD
     IN["<div style='min-width: 450px; text-align: left;'><b>[ Device fix events ]</b></div>"]
+    E{"Events &ge; device_min_samples<br/>and days &ge; min_cluster_device_days?"}
     K{"Supported clusters?"}
     N{"Noise share &le; max_noise_share?"}
     SEQ{"Transitions &ge; commuter_min_alternations?"}
@@ -116,8 +118,11 @@ graph TD
     O2["<b>COMMUTER</b>"]
     O3["<b>RELOCATED</b>"]
     O4["<b>HIGH_MOBILITY</b>"]
+    O5["<b>INSUFFICIENT_EVIDENCE</b>"]
 
-    IN --> K
+    IN --> E
+    E -->|No| O5
+    E -->|Yes| K
     K -->|0| O4
     K -->|1| N
     N -->|Yes| O1
@@ -132,7 +137,10 @@ graph TD
 | `STATIONARY` | Exactly one supported cluster and noise share &le; `max_noise_share` | Fixed desktop or router-attached device. |
 | `COMMUTER` | Two or more supported clusters and at least `commuter_min_alternations` transitions | Staff laptop moved between the facility and home. |
 | `RELOCATED` | Two or more supported clusters and fewer transitions than `commuter_min_alternations` | Equipment transferred, or facility moved. |
-| `HIGH_MOBILITY` | No supported cluster, or noise share above the limit | Roaming hotspot, personal phone, field kit. |
+| `HIGH_MOBILITY` | Enough evidence, but no supported cluster, or noise share above the limit | Roaming hotspot, personal phone, field kit. |
+| `INSUFFICIENT_EVIDENCE` | Fewer than `device_min_samples` fix events, or fix events on fewer than `min_cluster_device_days` days | Device that ran a handful of tests and was not seen again. |
+
+The rules are checked top to bottom in the diagram: the evidence gate comes first. For scoring, `INSUFFICIENT_EVIDENCE` earns the same stability points as `HIGH_MOBILITY` (the lowest tier), so it cannot raise a facility's confidence.
 
 Mobility class and amount of evidence are separate fields. Each device also reports `evidence_device_days`, so a stationary device seen on 3 days and one seen on 60 days share a class but not an evidence level.
 
@@ -148,7 +156,7 @@ Geofence compliance is reported per device but never feeds its class. It is the 
 
 | Field | Meaning |
 | ---| --- |
-| `mobility_class` | One of the four classes above. |
+| `mobility_class` | One of the five classes above. |
 | `total_scans`, `carried_scans` | Telemetry rows with valid coordinates, and how many of them are carried. |
 | `total_fix_events` | Non-carried fix events used for clustering. |
 | `evidence_device_days` | Distinct local dates with at least one fix event. |
@@ -389,6 +397,7 @@ Track 3 needs the country table of official pins, loaded from the same Delta Sha
   "commuter_devices_count": 0,
   "relocated_devices_count": 0,
   "high_mobility_devices_count": 0,
+  "insufficient_evidence_devices_count": 0,
   "total_scans": 7,
   "total_fix_events": 5,
   "facility_device_days": 2,
@@ -405,6 +414,8 @@ Track 3 needs the country table of official pins, loaded from the same Delta Sha
 *   **Timezone:** UTC `created_timestamp` is converted to local time before any operational-hours or workday rule.
 *   **No-IP Policy:** Never impute `detected_*` from `client_info`. Drop null coordinates before spatial work.
 *   **Fix Events:** All spatial evidence is counted in fix events and device-days, never raw rows.
+*   **Missing `device_id`:** Older app versions do not send a device identifier. Their rows still count as facility evidence, with all of a facility's unidentified rows on one day treated as one device-day, so support is undercounted rather than inflated. They are not classified in Pillar 1 and do not count towards `distinct_devices`, which can therefore be 0 for a facility with supported clusters.
+*   **Missing `device_id`:** Older app versions do not send a device identifier. Their rows still count as facility evidence, treated as one unknown device per day, which can undercount but never inflates support. They are left out of device mobility and out of `distinct_devices`, so a facility can report many device-days and zero distinct devices.
 
 ## 9\. Known Limitations
 
@@ -414,11 +425,15 @@ Track 3 needs the country table of official pins, loaded from the same Delta Sha
 *   **Stale but newly computed fixes:** The carried-fix rule only catches a fix that repeats an earlier answer exactly. If the first lookup after arriving at a new place returns a newly computed position for the previous place, nothing in the row tells it apart from a real reading. Such events stay in the evidence; they are usually single events, so support counting in device-days keeps them out of supported clusters.
 *   **SSID semantics:** SSIDs are user-set. Name matching is a tie-breaker and Track 3 evidence only.
 *   **Score double-count:** S\_bssid and S\_depth both reward active days. Kept unchanged pending calibration.
+*   **Country-wide pin offsets:** Each facility is compared with its own pin. If a whole registry is shifted, for example by a datum or projection error, every facility moves into the same distance band and the method reports many individual `CAMPUS_DISPERSION` or `GOVT_PIN_MISMATCH` flags instead of one registry-level problem. The [Research Log](research-log.md) records one such case.
 
-## 10\. Validation Plan
+## 10\. Validation
 
-1. Replay the previous and the current version on the same country ledger and publish the flag transition matrix in the [Research Log](research-log.md).
-2. Check the [Worked Examples](../spatial/examples.md) against their expected v0.3 outputs.
-3. Hand-review a random sample from each v0.3 Track 1 flag and each confidence tier.
+Each version is validated before it is frozen:
+
+1. Replay the previous and the current version on the same country ledger and publish the flag transition matrix.
+2. Check the [Worked Examples](../spatial/examples.md) against the measured outputs of the current version.
+3. Check every facility of several country ledgers against the Track 1 and action rules, and hand-review a random sample from each flag.
 4. Report how many BSSIDs lose their mobility tag after carried fixes are excluded.
-5. Freeze 0.3 and publish with `mike` only after these checks pass.
+
+The replay is run with `scripts/replay_versions.py`, which runs both versions on the same ledger in separate processes and writes the comparison report. The v0.3 results are in the [Research Log](research-log.md#validation).

@@ -1,7 +1,8 @@
 """
 Module: src/spatial_intelligence/mobility_analyzer.py
 Purpose: Pillar 1 device mobility. Classifies each device from its own fix
-         events (STATIONARY, COMMUTER, RELOCATED, HIGH_MOBILITY), without
+         events (STATIONARY, COMMUTER, RELOCATED, HIGH_MOBILITY, or
+         INSUFFICIENT_EVIDENCE), without
          using a facility centroid, and audits geofence compliance against a
          reference point.
 Rules: Settings come from SpatialConfig. Evidence is counted in fix events
@@ -24,7 +25,7 @@ from .fix_events import build_fix_event_table, mark_fix_events
 from .geo import NOISE_LABEL, dbscan_labels, haversine_m, weighted_centroid
 from .palette import ANCHOR_COLOR, GEOFENCE_COLOR, MOBILITY_COLORS
 
-MOBILITY_CLASSES = ("STATIONARY", "COMMUTER", "RELOCATED", "HIGH_MOBILITY")
+MOBILITY_CLASSES = ("STATIONARY", "COMMUTER", "RELOCATED", "HIGH_MOBILITY", "INSUFFICIENT_EVIDENCE")
 REFERENCE_FACILITY_ANCHOR = "facility_anchor"
 REFERENCE_DEVICE_DOMINANT = "device_dominant_cluster"
 
@@ -43,6 +44,9 @@ class MobilityAnalyzer:
       `commuter_min_alternations` switches between them over time.
     * `RELOCATED`: two or more supported clusters visited in sequence.
     * `HIGH_MOBILITY`: no supported cluster, or too much noise.
+    * `INSUFFICIENT_EVIDENCE`: fewer than `device_min_samples` fix events or
+      fewer than `min_cluster_device_days` days, so no cluster could be
+      supported. Checked first.
 
     Geofence compliance is an audit, not an input to the class. It is measured
     against the facility anchor when `facility_summary` is given, otherwise
@@ -219,7 +223,11 @@ class MobilityAnalyzer:
         total_events = len(events)
         noise_share = 1.0 - events["is_supported_cluster"].sum() / total_events
         transitions = self._cluster_transitions(events)
-        mobility_class = self._classify(len(supported_ids), noise_share, transitions)
+        evidence_days = int(events["local_date"].nunique())
+        if total_events < samples or evidence_days < self.config.min_cluster_device_days:
+            mobility_class = "INSUFFICIENT_EVIDENCE"
+        else:
+            mobility_class = self._classify(len(supported_ids), noise_share, transitions)
 
         dominant_id = self._dominant_cluster_id(supported)
         events["is_dominant_cluster"] = (
@@ -272,7 +280,7 @@ class MobilityAnalyzer:
             "total_scans": int(len(device_rows)),
             "carried_scans": int(device_rows["fix_carried"].sum()),
             "total_fix_events": total_events,
-            "evidence_device_days": int(events["local_date"].nunique()),
+            "evidence_device_days": evidence_days,
             "cluster_count": int(len(clusters)),
             "supported_cluster_count": int(len(supported_ids)),
             "noise_share": round(float(noise_share), 3),

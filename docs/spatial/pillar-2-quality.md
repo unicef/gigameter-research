@@ -1,7 +1,7 @@
 ## Pillar 2: Geolocation Quality, BSSID Fingerprinting & Confidence Scoring
 
-!!! note "v0.3 draft"
-    This page describes the v0.3 design. `SpatialProfiler` implements the anchor selection and `FacilityValidator` the scores. Settings are on the [Parameters](../blueprint/parameters.md) page.
+!!! note "v0.3"
+    This page describes the v0.3 methodology. `SpatialProfiler` implements the anchor selection and `FacilityValidator` the scores. Settings are on the [Parameters](../blueprint/parameters.md) page.
 
 ### 1\. Why This Pillar Exists
 

@@ -37,7 +37,13 @@ FLAG_BADGE = {
 }
 ACTION_BADGE = {"SUBMIT_CORRECTION": "red", "FIELD_VERIFY": "orange", "AWAIT_DATA": "gray", "NONE": "green"}
 CONFIDENCE_BADGE = {"HIGH": "green", "MEDIUM": "orange", "LOW": "red"}
-MOBILITY_BADGE = {"STATIONARY": "green", "COMMUTER": "blue", "RELOCATED": "orange", "HIGH_MOBILITY": "red"}
+MOBILITY_BADGE = {
+    "STATIONARY": "green",
+    "COMMUTER": "blue",
+    "RELOCATED": "orange",
+    "HIGH_MOBILITY": "red",
+    "INSUFFICIENT_EVIDENCE": "gray",
+}
 ATTRIBUTION_BADGE = {"CONSISTENT": "green", "OTHER_ENTITY_NEARBY": "red", "UNRESOLVED": "gray"}
 
 FLAG_LABELS = {

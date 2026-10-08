@@ -1,7 +1,7 @@
 ## Pillar 1: Entity Geofencing & Mobility Trajectory Detection
 
-!!! note "v0.3 draft"
-    This page describes the v0.3 design, which the `MobilityAnalyzer` code implements. Settings are on the [Parameters](../blueprint/parameters.md) page.
+!!! note "v0.3"
+    This page describes the v0.3 methodology, which the `MobilityAnalyzer` code implements. Settings are on the [Parameters](../blueprint/parameters.md) page.
 
 ### 1\. Why This Pillar Exists
 
@@ -33,7 +33,9 @@ If telemetry from a roaming laptop is blindly assigned to a static school facili
 
     3. `RELOCATED`: Two or more supported clusters with fewer switches, meaning the device moved and stayed.
 
-    4. `HIGH_MOBILITY`: No supported cluster, or too much noise.
+    4. `HIGH_MOBILITY`: Enough evidence, but no supported cluster, or too much noise.
+
+    5. `INSUFFICIENT_EVIDENCE`: Too few fix events, or fix events on a single day, so no cluster could be supported. Checked first, so a device seen once is not called mobile.
 
 ### 3\. Key Analytical Mechanics
 
