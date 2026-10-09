@@ -1,0 +1,171 @@
+/* 1. Revert hue value to match the deeper slate background */
+[data-md-color-scheme="slate"] {
+  --md-hue: 230;
+  --md-default-bg-color: hsla(230, 15%, 7%, 1);
+}
+
+.md-header__button.md-logo {
+  padding-top: .45rem; /* Adds space above the logo */
+}
+
+.md-header__button.md-logo svg {
+  height: .8rem;      /* Change logo height */
+  width: auto;         /* Maintains proportion */
+}
+
+
+.md-header__title .md-header__topic:nth-child(2) {
+  display: none !important;
+}
+
+
+:root {
+  --gm-tab-active: #FF5A36;   /* sunset orange */
+  --gm-tab-hover: #FFFFFF;    /* bright white */
+  --gm-nav-active: #FFD9B3;   /* warm light peach — reads well against black/dark slate */
+  --gm-nav-hover: #FFFFFF;    /* bright white */
+}
+
+/* Light theme override: medium peach (reads well on light background) */
+[data-md-color-scheme="default"] {
+  --gm-nav-active: #E8825A;   /* soft medium peach */
+}
+
+/* Light theme override */
+[data-md-color-scheme="default"] {
+  --gm-nav-hover: #8C2D00;    /* rich near-black */
+}
+
+/* Header: active + hovered top-level tab -> sunset orange */
+/* Header: active top-level tab -> sunset orange */
+.md-tabs__item--active .md-tabs__link,
+.md-tabs__link--active {
+  color: var(--gm-tab-active) !important;
+  opacity: 1 !important;
+}
+
+/* Header: hovered top-level tab -> bright white */
+.md-tabs__link:hover {
+  color: var(--gm-tab-hover) !important;
+  opacity: 1 !important;
+}
+
+.md-tabs__link {
+  opacity: 0.7;
+}
+
+/* Left sidebar: selected page -> light peach */
+.md-nav--primary .md-nav__link--active {
+  color: var(--gm-nav-active) !important;
+  font-weight: 700;
+}
+
+/* Left sidebar: any item on hover -> bright white */
+.md-nav--primary .md-nav__link:hover {
+  color: var(--gm-nav-hover) !important;
+}
+
+/* Right sidebar (Table of Contents): active heading link -> light peach */
+.md-nav--secondary .md-nav__link--active,
+.md-nav--secondary .md-nav__link--active:hover {
+  color: var(--gm-nav-active) !important;
+  font-weight: 700;
+}
+
+/* 2. Hero Section Typography */
+.hero-container {
+  text-align: center;
+  padding: -1rem 1rem;
+  margin-bottom: 3rem;
+}
+
+.hero-title {
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  color: #FFD9B3;
+  letter-spacing: -0.05em;
+}
+
+/* Light theme override: Slightly darker, richer tone for contrast */
+[data-md-color-scheme="default"] .hero-title {
+  color: #D96B27; /* deeper terracotta / burnt orange */
+}
+
+.hero-subtitle {
+  font-size: 1.25rem;
+  color: var(--md-default-fg-color);
+  max-width: 750px;
+  margin: 0 auto;
+  line-height: 2;
+}
+
+/* 3. Track Cards Grid (Pydantic Style) */
+.track-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+/* 4. Individual Card Styling */
+.track-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  background-color: var(--md-default-fg-color--lightest);
+  border: 1px solid var(--md-default-fg-color--lighter);
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Deep Orange Accent Top Border (Hidden by default, scales on hover) */
+/* .track-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--md-accent-fg-color); 
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease-in-out;
+} */
+
+/* The Hover Lift & Highlight Effect */
+.track-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+  border-color: var(--md-accent-fg-color);
+}
+
+.track-card:hover::before {
+  transform: scaleX(1);
+}
+
+.track-card h3 {
+  margin-top: 0;
+  font-size: 1.25rem;
+  color: var(--md-default-fg-color); /* Keeps text white in dark mode */
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s ease-in-out;
+}
+
+.track-card:hover h3 {
+  color: #D96B27; /* Turns deep orange on hover */
+}
+
+.track-card p {
+  margin-bottom: 0;
+  color: var(--md-default-fg-color--light);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
