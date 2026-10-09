@@ -1,319 +1,439 @@
 # Geofencing: Technical Blueprint & Research Methodology
 
-**Version:** <span style="background-color: #677eff; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">v0.2</span>
+**Version:** <span style="background-color: #677eff; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">v0.3</span>
 
-**Status:** <span style="background-color: #e91e63; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Hardening (exploring edge cases)</span>
+**Status:** <span style="background-color: #2e7d32; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Frozen</span>
 
-**Maturity:** <span style="background-color: #2e8555; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Active Baseline</span>
+**Maturity:** <span style="background-color: #b26a00; color: white; padding: 3px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 500; display: inline-block;">Validated on Replay</span>
+
+!!! note "Scope"
+    This page describes the v0.3 methodology, which the modules under `src/spatial_intelligence/` implement. Numeric settings are listed on the [Parameters](parameters.md) page; values marked *calibrate* were checked on replay but rest on limited data. Replay results and the history of the method are recorded in the [Research Log](research-log.md).
 
 ## 1\. Objective
-The primary objective of this framework is to replace static, self-reported administrative registries with spatially verified, crowdsourced field telemetry. By capturing background Wi-Fi BSSID environmental scans and high-frequency active speedtests via the GigaMeter application, the system dynamically calculates location truth, evaluates device mobility trajectories, and cross-validates official government administrative records.
 
-### 1.1 The 3 Research Pillars Fall Under This Topis
+The primary objective of this framework is to replace static, self-reported administrative registries with spatially verified, crowdsourced field telemetry. By capturing Wi-Fi geolocation results and active speedtests via the GigaMeter application, the system calculates location truth, evaluates device mobility trajectories, cross-validates official government records, and checks whether the telemetry is attributable to the registered entity.
+
+### 1.1 The 3 Research Pillars
 
 | Pillar Name | Primary Input Data | Core Methodologies | Primary Output / Operational Value |
 | ---| ---| ---| --- |
-| Pillar 1: Entity Geofencing & Mobility | Time-series coordinates, `device_id`, timestamps | DBSCAN clustering (eps=150m), operational window (08:00–19:59) | Mobility classification (`STATIONARY`, `COMMUTER`, `RELOCATED`, `HIGH_MOBILITY`). |
-| Pillar 2: Geolocation Quality & Confidence | Google API resolved lat/lon, accuracy, BSSIDs, SSIDs | Inverse-variance weighted centroids, 5-factor scoring model, BSSID Coherence Penalty | Unpenalized location score (S\_raw​), mobile hotspot tags, hardware health score. |
-| Pillar 3: Government Data Validation | Empirical facility centroids, official government registry pins | Haversine displacement (D\_govt​), Two-Track Engine Architecture | Decoupled location verification flags (`VERIFIED_ACCURATE`, `GOVT_PIN_MISMATCH`, etc.). |
+| Pillar 1: Entity Geofencing & Mobility | Device fix events, `device_id`, local timestamps | Per-device DBSCAN on fix events, support by device-days, cluster transitions | Mobility classification (`STATIONARY`, `COMMUTER`, `RELOCATED`, `HIGH_MOBILITY`, or `INSUFFICIENT_EVIDENCE`) with a separate evidence level. |
+| Pillar 2: Geolocation Quality & Confidence | Google API resolved lat/lon, accuracy, BSSIDs, SSIDs | Fix events, BSSID mobility test, facility observation clusters, inverse-variance centroids, 5-factor score, BSSID Coherence Penalty | Facility anchor cluster, unpenalized location score (S\_raw), mobile hotspot tags, hardware health score. |
+| Pillar 3: Government Data Validation | Anchor centroid, official registry pins, registry names | Haversine displacement (D\_govt), strategy agreement, Three-Track Engine | Decoupled flags: location truth with confidence tier, hardware anomaly tags, entity attribution. |
 
-### 1.2 The Two-Track Engine Paradigm Shift
-Earlier iterations of spatial validation utilized a single-flag cascade where severe hardware volatility (e.g., a laptop transported 200km between a school and a regional office) or high mobile hotspot usage forced the system into outputting a single flag such as `BSSID_SPATIAL_SPLIT`. This created an analytical paradox: even if the primary spatial cluster matched the official government registry pin perfectly (<= 30m), the single-flag system masked the verified physical building location under a hardware anomaly tag.
+### 1.2 Multi-Track Engine
 
-To eliminate this paradox, `v0.2` introduces the Two-Track Engine Architecture, cleanly decoupling two independent research dimensions:
+A facility can be correctly located while its monitoring hardware is unreliable, and the reverse. A single combined flag would hide one answer behind the other, so the engine reports independent tracks. No track's output is folded into another track's flag.
 
-1. **Track 1: Location Truth Engine (Pillar 3 Focus):** Evaluates the physical location of the brick-and-mortar facility against official government administrative records using the unpenalized spatial confidence score (S\_raw, 0–100) of the primary empirical cluster.
-2. **Track 2: Hardware Integrity Engine (Pillars 1 & 2 Focus):** Evaluates device deployment permanence, mobile hotspot dependency, and spatial split anomalies (> 2km), applying a multiplicative BSSID Coherence Penalty (P\_coherence) to yield a dedicated `hardware_health_score` and decoupled `hardware_anomaly_tags`.
+1. **Track 1: Location Truth Engine (Pillar 3):** Where is the facility anchor relative to the official pin, and how much evidence supports that answer?
+2. **Track 2: Hardware Integrity Engine (Pillars 1 & 2):** Are the monitoring devices a trustworthy installation (stationary, fixed infrastructure, no splits)?
+3. **Track 3: Entity Attribution Engine (Pillar 3):** Is the anchor plausibly the registered entity, rather than another facility or a private location?
 
-## 2\. 4-Layer Facility Location & Consolidation Architecture
-### 2.1 Overview & Pillar Integration Mechanics
-Raw crowdsourced telemetry contains significant spatial noise introduced by personal mobile tethering (teacher smartphones), staff commuter devices, and hardware relocations. To transform raw Wi-Fi BSSID environmental scans into an empirical location truth engine, processing is organised into a 4-Layer Consolidation Framework.
+Later versions may add tracks.
 
-This 4-layer model directly operationalises our core research pillars:
-*   Layer 1 executes Pillar 1 (`MobilityAnalyzer`) to isolate device-level mobility trajectories and extract primary operational clusters.
-*   Layer 2 executes Pillar 2 (`SpatialProfiler`) to calculate accuracy-weighted empirical centroids across persistent fixed infrastructure.
-*   Layer 3 executes the composite scoring engine inside `FacilityValidator` to measure hardware stability, multi-device spatial consensus, and BSSID coherence.
-*   Layer 4 completes Pillars 1, 2 & 3 (`FacilityValidator`) by cross-validating empirical centroids against official government administrative coordinates to output decoupled primary location flags and secondary hardware anomaly tags.
+## 2\. Evidence Unit: Fix Events
 
-### 2.2 Architectural Blueprint & Layer Progression
+Each speedtest triggers a fresh lookup: the client scans the associated and nearby Wi-Fi access points, and the backend resolves that list through the Google Geolocation API into `detected_latitude`, `detected_longitude`, and `detected_location_accuracy`.
+
+Many consecutive rows from one device still carry exactly the same `(lat, lon, accuracy)`. Three situations produce this:
+
+*   **Bursts:** several tests seconds or minutes apart.
+*   **Unchanged environment:** a later test sees the same access points and Google returns the same answer. This is genuine repeated evidence.
+*   **Carried fixes:** the same coordinates appear under a different associated network, sometimes kilometres from that network's other fixes. The cause is not confirmed (see [Known Limitations](#9-known-limitations)).
+
+Counting rows overstates evidence, and carried fixes attach coordinates to the wrong network.
+
+Rows are converted to **fix events** per device, in time order:
+
+1. **Burst collapse:** Consecutive rows with the same fix within `burst_window_s` form one event.
+2. **Fresh repeat:** The same fix under the same BSSID after a longer gap is a new event. It adds support (another session or day) but the centroid weights each event once, not each row.
+3. **Carried fix:** Consecutive rows with the same fix form a *run*; the run's origin network is the first associated BSSID in it. A row whose BSSID differs from its run's origin network is marked `fix_carried = True`. It is excluded from BSSID mobility tests, BSSID centroids, and cluster support, and remains available to non-spatial analyses. Rows with no associated network are never carried and do not set the origin, because a device switching between cable and Wi-Fi in one place legitimately gets the same answer. Excluding a carried row loses no location: the same coordinates are already counted under the origin network.
+
+**Support** for a location is counted in distinct device-days of non-carried fix events, then distinct devices, then events.
+
+## 3\. Layered Architecture (Device-First)
+
+### 3.1 Layer Overview
 
 ```mermaid
 graph TD
-    L1["<div style='width: 550px; text-align: left;'><b>LAYER 1: Device Trajectory Disambiguation (Pillar 1 Output)</b><br/>• Filter strictly for operational hours (08:00-19:59 local time)<br/>• Extract Cluster 0 (Primary) for Stationary & Commuter devices<br/>• Discard secondary residential clusters & relocated device points</div>"]
-    
-    L2["<div style='width: 550px; text-align: left;'><b>LAYER 2: Empirical Facility Centroid Engine (Pillar 2 Output)</b><br/>• Calculate Accuracy-Weighted Spatial Centroid across valid devices<br/>• Execute Strategy: TELEMETRY_DOMINANCE | GOVT_PROXIMITY | STATIONARY<br/>• Extract persistent 'Anchor BSSIDs' observed across multiple devices</div>"]
-    
-    L3["<div style='width: 550px; text-align: left;'><b>LAYER 3: Two-Track Engine Evaluation (Pillars 1, 2 & 3 Output)</b><br/>• Track 1: Location Confidence Score = S_raw (0 - 100 Unpenalized)<br/>• Track 2: Hardware Health Score = S_raw * P_coherence<br/>• Apply Multiplicative Coherence Penalty (P_coherence) for Splits >2km</div>"]
-    
-    L4["<div style='width: 550px; text-align: left;'><b>LAYER 4: Decoupled Taxonomy Output Engine</b><br/>• Track 1 Flag: VERIFIED_ACCURATE, GOVT_PIN_MISMATCH, etc.<br/>• Track 2 Tags: ['BSSID_SPATIAL_SPLIT'], ['HOTSPOT_TETHERED']</div>"]
+    L0["<div style='width: 550px; text-align: left;'><b>LAYER 0: Ingestion & Fix Events</b><br/>• Canonical loader, no-IP rule, local time<br/>• Collapse bursts, mark carried fixes<br/>• Tag hotspot SSIDs, test BSSID mobility</div>"]
 
-    L1 --> L2
-    L2 --> L3
-    L3 --> L4
+    L1["<div style='width: 550px; text-align: left;'><b>LAYER 1: Device Trajectories (Pillar 1)</b><br/>• DBSCAN per device on fix events<br/>• Classify from the device's own clusters and dates<br/>• No dependency on the facility centroid</div>"]
+
+    L2["<div style='width: 550px; text-align: left;'><b>LAYER 2: Facility Anchor (Pillar 2)</b><br/>• Cluster weekday operational-hours fix events per facility<br/>• Select one anchor cluster per strategy; report agreement<br/>• Inverse-variance centroid inside the anchor cluster only</div>"]
+
+    L3["<div style='width: 550px; text-align: left;'><b>LAYER 3: Scoring</b><br/>• S_raw computed on the anchor cluster<br/>• Hardware Health = S_raw * P_coherence</div>"]
+
+    L4["<div style='width: 550px; text-align: left;'><b>LAYER 4: Three-Track Output</b><br/>• Track 1: distance flag + confidence tier + action<br/>• Track 2: hardware anomaly tags<br/>• Track 3: entity attribution flag</div>"]
+
+    L0 --> L1 --> L2 --> L3 --> L4
 ```
 
-1. **SpatialProfiler answers:** _"Where is the physical building located?"_
+1. **MobilityAnalyzer answers:** _"How does each device move, on its own terms?"_
+2. **SpatialProfiler answers:** _"Which observed location is the facility, and how well is it supported?"_
+3. **FacilityValidator answers:** _"Does that location match the government map (Track 1), is the hardware reliable (Track 2), and is the telemetry attributable to this entity (Track 3)?"_
 
-2. **MobilityAnalyzer answers:** _"How are the individual devices moving relative to that building?"_
+### 3.2 Processing Sequence
 
-3. **FacilityValidator answers:** _"Can we verify the building location on government maps (Track 1), and how reliable is the installed monitoring hardware (Track 2)?"_
-
-## 2.3 Processing Sequence & Module Dependency Chain
-To ensure data integrity and prevent circular import issues in code execution, the pipeline components run in a strict, unidirectional dependency chain:
+The chain is one-way. `MobilityAnalyzer` does not need a facility summary; the profiler consumes device classes, which makes `STATIONARY_FIRST` possible. Geofence compliance against the anchor is an audit computed after Layer 2.
 
 ```mermaid
 graph TD
-    S1["<div style='min-width: 550px; text-align: left;'><b>[ Step 1: Pre-Processing & Timezone Enrichment ]</b><br/>• Maps UTC timestamps to local device time (08:00 - 19:59 window)</div>"]
-
-    S2["<div style='min-width: 550px; text-align: left;'><b>[ Step 2: SpatialProfiler Execution (Pillar 2 Base) ]</b><br/>• Identifies & tags mobile tethering hotspots (SSID regex & drift > 1km)<br/>• Computes physical Empirical Facility Centroid via Strategy Mode</div>"]
-
-    S3["<div style='min-width: 550px; text-align: left;'><b>[ Step 3: MobilityAnalyzer Execution (Pillar 1 Trajectory) ]</b><br/>• Computes instantaneous displacement (displacement_m) per ping<br/>• Runs DBSCAN clustering to categorize device mobility behavior</div>"]
-
-    S4["<div style='min-width: 550px; text-align: left;'><b>[ Step 4: FacilityValidator Execution (Pillars 1, 2 & 3 Truth Engine) ]</b><br/>• Evaluates 5-Factor Raw Score & BSSID Coherence Penalty (P_coherence)<br/>• <b>Track 1:</b> Evaluates unpenalized centroid vs Govt Pin ➔ location_verification_flag<br/>• <b>Track 2:</b> Evaluates hardware health score & outputs hardware_anomaly_tags</div>"]
+    S1["<div style='min-width: 550px; text-align: left;'><b>[ Step 1: TelemetryLoader ]</b><br/>• Canonical columns, official pins, local time</div>"]
+    S2["<div style='min-width: 550px; text-align: left;'><b>[ Step 2: Fix Events & Hotspot Tagging ]</b><br/>• Burst collapse, carried-fix marking, BSSID mobility</div>"]
+    S3["<div style='min-width: 550px; text-align: left;'><b>[ Step 3: MobilityAnalyzer ]</b><br/>• Device clusters, mobility class, evidence level</div>"]
+    S4["<div style='min-width: 550px; text-align: left;'><b>[ Step 4: SpatialProfiler ]</b><br/>• Facility clusters, strategy candidates, anchor centroid</div>"]
+    S5["<div style='min-width: 550px; text-align: left;'><b>[ Step 5: FacilityValidator ]</b><br/>• Geofence audit, S_raw, Tracks 1-3</div>"]
 
     S1 --> S2
-    S2 -->|Passes Facility Centroid Anchor| S3
-    S3 -->|Passes Device Mobility Classes & Clusters| S4
+    S2 -->|Fix events| S3
+    S3 -->|Device classes & clusters| S4
+    S4 -->|Anchor cluster & candidates| S5
 ```
 
-## 3\. Pillar 1: MobilityAnalyzer Blueprint & Logic
-### 3.1 Overview & Trajectory Disambiguation
-The `MobilityAnalyzer` module evaluates hardware movement trajectories at the individual `device_id` level. It utilizes DBSCAN (Density-Based Spatial Clustering of Applications with Noise) with a native Haversine metric to group geographic locations into spatial clusters without requiring a pre-defined cluster count.
-#### Processing Passes:
-*   **Pass 1: Mobile Hotspot & Drift Filtering**: Identifies personal mobile hotspots and tags high-volatility BSSIDs to prevent consumer phones from skewing hardware trajectory analysis.
-*   **Pass 2: Density-Based Spatial Clustering (DBSCAN)**: Groups valid coordinate pairs per device using a spatial radius threshold (eps = 150 meters) and a minimum density threshold (min\_samples = 3).
-*   **Pass 3: Temporal & Operational Disambiguation**: Evaluates scan distributions across clusters during active operational hours (08:00–19:59) vs. off-hours/weekends.
-*   **Pass 4**: Behavioral Classification & Geofence Auditing: Classifies hardware behavior into four operational states: `STATIONARY`, `COMMUTER`, `RELOCATED`, or `HIGH_MOBILITY`.
-### 3.2 Multi-Pass Device Mobility Engine Flowchart
+## 4\. Pillar 1: MobilityAnalyzer Logic
+
+### 4.1 Processing Passes
+
+*   **Pass 1: Input:** The device's non-carried fix events, all hours. Weekends are kept because they carry commuting and relocation signal.
+*   **Pass 2: DBSCAN:** Haversine metric on fix events with `device_eps_m` and `device_min_samples` (counted in events, not rows).
+*   **Pass 3: Support:** A cluster is *supported* when it spans at least `min_cluster_device_days` distinct days. Unsupported clusters are treated as noise.
+*   **Pass 4: Evidence gate:** A device with fewer than `device_min_samples` fix events, or with fix events on fewer than `min_cluster_device_days` days, cannot form a supported cluster at all. It is classed `INSUFFICIENT_EVIDENCE` instead of being called mobile.
+*   **Pass 5: Classification:** Uses the device's own supported clusters and how often the device switches between them. Cluster labels carry no meaning; the dominant cluster is the one with the most support (device-days, then events, then the earliest start), not cluster `0`.
+
+A *transition* is a change of supported cluster between two consecutive fix events of the device, in time order, ignoring noise events. A device that moves once and stays has one transition; a device that goes back and forth has many.
+
+### 4.2 Classification Rules
 
 ```mermaid
 graph TD
-    IN["<div style='min-width: 550px; text-align: left;'><b>[ Input: Valid Device Telemetry Scans ]</b></div>"]
+    IN["<div style='min-width: 450px; text-align: left;'><b>[ Device fix events ]</b></div>"]
+    E{"Events &ge; device_min_samples<br/>and days &ge; min_cluster_device_days?"}
+    K{"Supported clusters?"}
+    N{"Noise share &le; max_noise_share?"}
+    SEQ{"Transitions &ge; commuter_min_alternations?"}
 
-    P1["<div style='min-width: 550px; text-align: left;'><b>[ Pass 1: Mobile Hotspot & Drift Detection ]</b><br/>• Isolate fixed infrastructure scans from mobile tethering</div>"]
+    O1["<b>STATIONARY</b>"]
+    O2["<b>COMMUTER</b>"]
+    O3["<b>RELOCATED</b>"]
+    O4["<b>HIGH_MOBILITY</b>"]
+    O5["<b>INSUFFICIENT_EVIDENCE</b>"]
 
-    P2["<div style='min-width: 550px; text-align: left;'><b>[ Pass 2: DBSCAN Spatial Clustering ]</b><br/>• Convert coordinates to Radians: (lat, lon) * (&pi; / 180)<br/>• Parameter: eps = 150m / 6371008.8m (Earth Radius)<br/>• Parameter: min_samples = 3<br/>• Output: Assign Cluster ID (0, 1, 2... or -1 for Noise)</div>"]
-
-    P3["<div style='min-width: 550px; text-align: left;'><b>[ Pass 3: Temporal & Operational Disambiguation ]</b><br/>• Calculate Cluster 0 centroid (Primary Operational Cluster)<br/>• Measure geofence displacement (D_centroid) per ping<br/>• Evaluate timestamp sequence across secondary clusters</div>"]
-
-    P4["<div style='min-width: 550px; text-align: left;'><b>[ Pass 4: Behavioral Classification Engine ]</b></div>"]
-
-    %% Outcomes %%
-    O1["<b>STATIONARY</b><br/>(Compliant Anchor)"]
-    O2["<b>COMMUTER</b><br/>(Staff Personal)"]
-    O3["<b>RELOCATED</b><br/>(Hardware Moved)"]
-    O4["<b>HIGH_MOBILITY</b><br/>(Mobile Hotspot)"]
-
-    %% Flow %%
-    IN --> P1
-    P1 --> P2
-    P2 --> P3
-    P3 --> P4
-
-    %% Branching Logic %%
-    P4 -->|1 Cluster &<br/>Compliant > 90%| O1
-    P4 -->|2+ Clusters &<br/>Off-Hour Shift| O2
-    P4 -->|2+ Clusters &<br/>Sequential Shift| O3
-    P4 -->|Compliance < 50% /<br/>No Form| O4
+    IN --> E
+    E -->|No| O5
+    E -->|Yes| K
+    K -->|0| O4
+    K -->|1| N
+    N -->|Yes| O1
+    N -->|No| O4
+    K -->|2+| SEQ
+    SEQ -->|Yes: interleaved| O2
+    SEQ -->|No: sequential| O3
 ```
 
-## 3.3 Summary Comparison Table of Mobility Classes
+| Mobility Class | Rule | Real-World Context |
+| ---| ---| --- |
+| `STATIONARY` | Exactly one supported cluster and noise share &le; `max_noise_share` | Fixed desktop or router-attached device. |
+| `COMMUTER` | Two or more supported clusters and at least `commuter_min_alternations` transitions | Staff laptop moved between the facility and home. |
+| `RELOCATED` | Two or more supported clusters and fewer transitions than `commuter_min_alternations` | Equipment transferred, or facility moved. |
+| `HIGH_MOBILITY` | Enough evidence, but no supported cluster, or noise share above the limit | Roaming hotspot, personal phone, field kit. |
+| `INSUFFICIENT_EVIDENCE` | Fewer than `device_min_samples` fix events, or fix events on fewer than `min_cluster_device_days` days | Device that ran a handful of tests and was not seen again. |
 
-| Mobility Class | Cluster Count (K) | Spatial Pattern | Temporal Behavior | Real-World Operational Context |
-| ---| ---| ---| ---| --- |
-| `STATIONARY` | 1 Primary Cluster | Tight spatial anchor (<=150m - 200m) | High compliance (>= 90%) across all days and hours | Dedicated, fixed desktop or router monitoring hardware anchored to the school building. |
-| `COMMUTER` | 2+ Clusters | Alternates between Cluster 0 (School) and Cluster 1+ (Home/Off-site) | Cluster 0 during active hours (08:00–19:59); Cluster 1 off-hours and weekends | Mobile laptop or tablet owned by a teacher/staff member who brings it to work and takes it home. |
-| `RELOCATED` | 2+ Clusters | Permanent geographic shift from Cluster A to Cluster B | Strictly Cluster A before Date T; strictly Cluster B after Date T | Equipment permanently transferred to another facility, stolen, or school physically relocated. |
-| `HIGH_MOBILITY` | Many / Noise | Low geofence compliance (< 50%) or scattered spatial points | Volatile across days and operational hours | Roaming mobile hotspot, staff personal smartphone, or field audit kit. |
+The rules are checked top to bottom in the diagram: the evidence gate comes first. For scoring, `INSUFFICIENT_EVIDENCE` earns the same stability points as `HIGH_MOBILITY` (the lowest tier), so it cannot raise a facility's confidence.
 
-## 4\. Pillar 2: SpatialProfiler Blueprint & Logic
-### 4.1 Overview & Data Ingestion Rules
-The `SpatialProfiler` module serves as the **foundational spatial processing engine**. It ingests raw telemetry measurements, standardizes facility identifiers (`school_id_giga`), enriches records with local device timestamps, and tags consumer mobile hotspots, and resolves empirical facility centroids using configurable strategy modes.
-#### Processing Rules:
-1. **No-IP Fallback Policy:** The profiler strictly discards records where `detected_latitude` or `detected_longitude` is `null`. IP-based fallback imputation is never attempted for these fields. While IP-derived geolocation coordinates are captured inside the nested `client_info` JSON blob for network-level diagnostics, they are explicitly ignored during spatial centroid modeling because they resolve to distant ISP routing hubs rather than the facility campus.
-2. **Operational Window Isolation:** Time-series telemetry is filtered strictly between 08:00:00 and 19:59:59 local device time (`is_operational_hours = True`) to prevent nighttime or off-hour device transport from skewing facility locations.
-3. **Consumer Hotspot & Drift Engine:**
-    1. **SSID Regex Pattern Matching:** Passive and active SSIDs are evaluated against a consumer hotspot pattern:
-        1. Pattern = (?i)(iphone\\android\\galaxy\\hotspot\\teacher\\pixel\\redmi\\tether\\samsung\\huawei\\oppo\\vivo\\xiaomi\\realme\\mobicom\\unitel\\mifi)
-    2. **Multi-Day Spatial Drift Check:** BSSIDs displaying multi-day spatial drift exceeding 1000m across different dates are tagged as `is_hotspot_drift = True`.
-4. **Candidate BSSID Spatial Clustering & Spatial Splits:**
-    *   Pairwise distances (D\_bssid) between BSSID centroids are calculated.
-    *   D\_bssid <= 200m → Merged & averaged (same physical campus/building).
-    *   200m < D\_bssid \\<= 2000m → Retained as minor campus dispersion.
-    *   D\_bssid > 2000m → Triggers `BSSID_SPATIAL_SPLIT` anomaly tag.
+Mobility class and amount of evidence are separate fields. Each device also reports `evidence_device_days`, so a stationary device seen on 3 days and one seen on 60 days share a class but not an evidence level.
 
-### 4.2 Configurable Primary Cluster Resolution Strategies
+### 4.3 Geofence Audit
 
-To address BSSID splits (> 2km) without introducing analytical bias, `SpatialProfiler` supports three configurable resolution modes:
+Geofence compliance is reported per device but never feeds its class. It is the share of the device's fix events within `geofence_radius_m` of a reference point. `reference_source` names that point:
 
-*   **Mode 1:** `GOVT_PROXIMITY_ANCHOR` **(Prior-Informed Default):** If a BSSID split occurs, the engine checks if any candidate cluster centroid is <= 2000m from official government coordinates (phi\_govt, lambda\_govt). If candidate clusters exist near the government pin, it selects the cluster with the highest operational scan density among them.
+*   `facility_anchor`: the facility's anchor centroid (Section 5), used once the anchor is known.
+*   `device_dominant_cluster`: the centroid of the device's own dominant cluster, used when no anchor is available.
+*   Empty when the device has no supported cluster; compliance and displacement are then not computed.
 
-*   **Mode 2:** `TELEMETRY_DOMINANCE` **(Unbiased Field Benchmark):** Evaluates spatial data strictly based on scan volume during active operational hours (08:00–19:59), ignoring government coordinates entirely. Ideal for Pillar 3 auditing without circular reasoning.
+### 4.4 Device Output
 
-*   **Mode 3:** `STATIONARY_FIRST` **(Hardware-First Mode):** Filters candidate clusters for scans originating strictly from devices classified as `STATIONARY` before computing the facility centroid.
+| Field | Meaning |
+| ---| --- |
+| `mobility_class` | One of the five classes above. |
+| `total_scans`, `carried_scans` | Telemetry rows with valid coordinates, and how many of them are carried. |
+| `total_fix_events` | Non-carried fix events used for clustering. |
+| `evidence_device_days` | Distinct local dates with at least one fix event. |
+| `cluster_count`, `supported_cluster_count` | DBSCAN clusters found, and how many are supported. |
+| `noise_share`, `cluster_transitions` | Inputs to the classification rules. |
+| `dominant_cluster_id`, `dominant_cluster_device_days`, `dominant_centroid_lat`, `dominant_centroid_lon` | The best-supported cluster and its accuracy-weighted centroid. |
+| `reference_source`, `compliance_rate_pct`, `max_displacement_m`, `median_displacement_m` | Geofence audit (Section 4.3). |
+| `methodology_version`, `config_hash` | Provenance of the settings used. |
 
-### 4.3 Spatial Profiling & Aggregation Engine Flowchart
+## 5\. Pillar 2: SpatialProfiler Logic
+
+### 5.1 Data Ingestion Rules
+
+1. **No-IP Policy:** Rows with null `detected_latitude` or `detected_longitude` are dropped. `client_info` IP coordinates are never used as facility pins.
+2. **Anchor Window:** Facility clustering uses fix events inside 08:00:00–19:59:59 local time on configured `workdays`. Device mobility (Layer 1) uses all hours.
+3. **Fix Events:** As defined in Section 2.
+
+### 5.2 Hotspot & BSSID Mobility Signals
+
+*   **SSID regex:** A case-insensitive consumer hotspot pattern (`hotspot_ssid_pattern`, for example `iphone`, `galaxy`, `hotspot`, `mifi`) sets `is_hotspot_ssid`.
+*   **BSSID mobility (`is_mobile_bssid`):** Keep fix events for one BSSID with accuracy &le; `bssid_mobility_accuracy_gate_m`, excluding carried fixes. Run DBSCAN with `bssid_mobility_eps_m` and `bssid_mobility_min_samples`. The BSSID is mobile when two or more clusters each span at least `bssid_mobility_min_cluster_days`. A single stray reading cannot mark a fixed router as mobile.
+*   **Locally administered MAC bit:** Recorded as `is_laa_bssid`. Phone hotspots commonly randomise their MAC, but mesh routers also set this bit, so it is evidence, not a trigger.
+*   `is_mobile_hotspot = is_hotspot_ssid OR is_mobile_bssid`.
+
+### 5.3 Facility Observation Clusters
+
+The facility is located from clusters of observations, not from BSSIDs. A BSSID can appear at more than one place, and many tests have no associated BSSID at all (wired or unassociated devices), so grouping by BSSID cannot separate locations.
+
+1. Run DBSCAN (`anchor_eps_m`, minimum one event) on the facility's anchor-window fix events from all devices, including events without a BSSID. Every event belongs to a cluster; support, not DBSCAN, decides which clusters count.
+2. Each cluster records its BSSIDs, SSIDs, devices, device-days, event count, hotspot share, mean accuracy, and distance to the official pin.
+3. A cluster is *supported* when it has at least `min_support_device_days` distinct device-days. Candidates are the supported clusters; when none is supported, all clusters are candidates and the anchor is reported with `anchor_supported = false`.
+4. Candidates whose hotspot share is at least `hotspot_share_min` are excluded when a non-hotspot candidate exists.
+5. **Anti-blending invariant:** a centroid is only ever computed inside one cluster. No facility coordinate is an average across clusters.
+
+### 5.4 Strategy Candidates & Agreement
+
+Each strategy selects one candidate cluster. Ranking within a strategy is by support (device-days, then devices, then events).
+
+*   **`GOVT_PROXIMITY_ANCHOR`:** Highest-support cluster with its centroid within `govt_anchor_radius_m` of the official pin. Distance to the pin only breaks support ties. Falls back to `TELEMETRY_DOMINANCE` when the facility has no pin (`no_govt_pin`) or no cluster is in range (`no_cluster_within_govt_anchor_radius`).
+*   **`TELEMETRY_DOMINANCE`:** Highest-support cluster, ignoring the pin.
+*   **`STATIONARY_FIRST`:** Highest-support cluster when support is counted only from events of `STATIONARY` devices and the dominant cluster of `COMMUTER` devices. Falls back to `TELEMETRY_DOMINANCE` when device classes are not provided (`no_device_classes`) or no such events exist (`no_stationary_evidence`).
+
+The default run evaluates `GOVT_PROXIMITY_ANCHOR` and `TELEMETRY_DOMINANCE`:
 
 ```mermaid
 graph TD
-    %% Linear Filters
-    IN["<div style='min-width: 500px; text-align: left;'><b>[ Raw Telemetry Ingestion ]</b><br/>• Raw measurements & pings</div>"]
-    F1["<div style='min-width: 500px; text-align: left;'><b>[ Filter: App Version & Source ]</b><br/>• App Version &ge; 2.0.2 & source = 'DailyCheckApp'</div>"]
-    F2["<div style='min-width: 500px; text-align: left;'><b>[ Temporal Standardization ]</b><br/>• UTC &rarr; Local Device Timestamp</div>"]
-    F3["<div style='min-width: 500px; text-align: left;'><b>[ Operational Window Filter ]</b><br/>• 08:00 to 19:59 Local Time</div>"]
-    F4["<div style='min-width: 500px; text-align: left;'><b>[ Strict No-IP Filter ]</b><br/>• Drop if detected_latitude IS NULL</div>"]
+    A["Candidates: govt proximity, telemetry dominance"]
+    Q{"Same cluster?"}
+    NM{"Exactly one candidate's SSIDs<br/>match the registry name?"}
+    OK["Anchor = shared cluster<br/>strategy_agreement = true"]
+    TB["Anchor = name-matched cluster<br/>anchor_resolved_by = ssid_name_match"]
+    AMB["Track 1: AMBIGUOUS_MULTI_CLUSTER<br/>(both candidate distances reported)"]
 
-    %% Hotspot Detection
-    HS["<div style='min-width: 500px; text-align: left;'><b>[ Mobile Hotspot & Drift Engine ]</b><br/>• Regex Match: SSID matches consumer hotspot patterns?<br/>• Spatial Drift: BSSID moves > 1000m across days?</div>"]
-    
-    HS_YES["Tag: is_mobile_hotspot = True"]
-    HS_NO["Tag: is_mobile_hotspot = False"]
-
-    %% Clustering
-    CL["<div style='min-width: 500px; text-align: left;'><b>[ Candidate BSSID Spatial Clustering ]</b><br/>• Group scans by BSSID & calculate inverse-variance weighted centroids<br/>• Measure pairwise distance between BSSID centroids (max_bssid_dist_m)</div>"]
-
-    %% Distance Branches
-    C1["Merge & Average<br/><i>(Same Campus)</i>"]
-    C2["Tag: CAMPUS_DISPERSION"]
-    C3["Trigger: BSSID_SPATIAL_SPLIT"]
-
-    %% Strategy Engine
-    ST["<div style='min-width: 500px; text-align: left;'><b>[ Configurable Strategy Resolution Engine ]</b><br/>• <b>GOVT_PROXIMITY_ANCHOR:</b> Select cluster &le; 2km from Govt Pin<br/>• <b>TELEMETRY_DOMINANCE:</b> Select cluster with max operational scans<br/>• <b>STATIONARY_FIRST:</b> Select cluster from stationary devices</div>"]
-
-    %% Output
-    EXP["<div style='min-width: 500px; text-align: left;'><b>[ Export ]</b><br/>• Empirical Facility Centroid & BSSID Infrastructure Profiles</div>"]
-
-    %% Connections
-    IN --> F1 --> F2 --> F3 --> F4 --> HS
-    
-    HS -->|Yes| HS_YES
-    HS -->|No| HS_NO
-    
-    HS_YES --> CL
-    HS_NO --> CL
-
-    CL -->|dist &le; 200m| C1
-    CL -->|200m < dist &le; 2km| C2
-    CL -->|dist > 2km| C3
-
-    C1 --> ST
-    C2 --> ST
-    C3 --> ST
-
-    ST --> EXP
+    A --> Q
+    Q -->|Yes| OK
+    Q -->|No| NM
+    NM -->|Yes| TB
+    NM -->|No| AMB
 ```
 
-##   
+**Registry name match:** The registry name and SSID are lowercased, stripped of diacritics, and cleaned of generic tokens (`name_match_generic_tokens`, for example `shkolla`, `school`, grade labels, band suffixes such as `2.4g`). A number written directly before a generic token is dropped with it, so `9-vjeçare` and the `2` of `2.4g` do not count. An SSID matches when it contains every remaining token of the registry name; a registry name with no remaining token never matches.
 
-## 5\. Pillar 3 & 4: FacilityValidator & Two-Track Engine Mechanics
-### 5.1 Overview & Two-Track Engine Logic
-The `FacilityValidator` module consolidates multi-device spatial clusters into a Two-Track Validation Engine. It bridges empirical field telemetry with administrative metadata to evaluate two independent tracks: Location Truth (Pillar 3) and Hardware Health (Pillars 1 & 2).
-### 5.2 Comprehensive 5-Factor Score Component Breakdown
-The raw spatial confidence score (S\_raw, 0–100) evaluates five distinct spatial and operational dimensions of the primary empirical cluster:
+A cluster *name-matches* when matching SSIDs are seen on at least `min_support_device_days` of its device-days. A single reading of the facility's SSID at a staff member's home therefore does not make the home cluster match. The name match is used only to break a strategy disagreement and is always recorded.
+
+Every facility reports `anchor_cluster_id`, `anchor_bssids`, `strategy_candidates`, `candidate_govt_displacement_m`, `strategy_agreement`, `anchor_resolved_by`, and `strategy_fallback_reason`. `anchor_resolved_by` is one of:
+
+| Value | Meaning |
+| --- | --- |
+| `strategy_agreement` | All configured strategies chose the same cluster. |
+| `single_strategy` | Only one strategy is configured. |
+| `ssid_name_match` | Strategies disagreed; exactly one candidate name-matches. |
+| `unresolved` | Strategies disagreed and the name match did not decide. No anchor centroid is reported; candidate distances are. |
+| `no_cluster` | The facility has no anchor-window fix events. |
+
+### 5.5 Accuracy-Weighted Centroid
+
+Inside the anchor cluster, each fix event gets one weight:
+
+$$w_i = \frac{1}{\max(A_i, A_{\text{floor}})^2}, \quad \bar{\phi} = \frac{\sum w_i \phi_i}{\sum w_i}, \quad \bar{\lambda} = \frac{\sum w_i \lambda_i}{\sum w_i}$$
+
+Because averaging is confined to one cluster, the planar lat/lon mean is adequate at campus scale.
+
+## 6\. FacilityValidator: Scoring & Tracks
+
+### 6.1 Raw Score (S\_raw)
+
+Five factors are computed on the **anchor cluster**, not on all of the facility's telemetry, so evidence from other locations does not raise or lower the anchor's confidence.
 
 $$S_{\text{raw}} = S_{\text{stability}} + S_{\text{consensus}} + S_{\text{bssid}} + S_{\text{depth}} + S_{\text{precision}}$$
 
-| Component Name | Max Points | Tracked Inputs & Metrics | Mathematical Logic & Evaluation Rules | Operational Impact & Thresholds |
-| ---| ---| ---| ---| --- |
-| 1\. Device Stability Profile (S\_stability) | 30 pts | Categorical mobility class of all devices registered to facility (`STATIONARY`, `COMMUTER`, `RELOCATED`, `HIGH_MOBILITY`). | `if STATIONARY in devices: score = 30.0`<br><br>`elif COMMUTER in devices: score = 20.0`<br><br>`else: score = 10.0`<br> | Evaluates hardware permanence. Awarded 30 points if at least one stationary device anchors the building. |
-| 2\. Multi-Device Spatial Consensus (S\_consensus) | 25 pts | Maximum pairwise Haversine distance (d\_max in meters) between primary cluster centroids across multiple devices. | `if d_max <= 30: score = 25.0`<br><br>`elif 30 < d_max <= 200:`<br><br>`score = 25.0 * (1.0 - (d_max - 30) / 170.0)`<br><br>`else: score = 0.0`<br><br>(Single-device default = 12.5 pts)<br> | Evaluates whether distinct hardware devices agree on facility location. d\_max > 200m indicates conflicting hardware setups. |
-| 3\. BSSID Infrastructure Persistence (S\_bssid) | 20 pts | Presence of fixed, non-null BSSIDs and active operational days recorded with valid BSSIDs. | `if bssid_exists and days_active >= 3:`<br><br>`score = 20.0`<br><br>`else: score = 10.0`<br> | Rewards persistent Wi-Fi router infrastructure. Ambient background scans without associated BSSIDs receive 10 points. |
-| 4\. Data Temporal Depth (S\_depth) | 15 pts | Count of unique operational days recorded in the observation window. | `score = min(15.0, 15.0 * (days_active / 10.0))`<br> | Scales linearly up to 10 active days. Reaching 10+ operational days awards the full 15 points. |
-| 5\. API Precision Radius (S\_precision) | 10 pts | Mean reported Google Geolocation API accuracy radius (mean\_acc in meters). | `score = max(0.0, 10.0 * (1.0 - (mean_acc - 10) / 90.0))`<br> | Evaluates precision returned by Google API. mean\_acc <= 10m receives 10 points; mean\_acc >= 100m receives 0 points. |
+| Component | Max | v0.3 input |
+| --- | --- | --- |
+| S\_stability | 30 | Mobility classes of devices contributing to the anchor cluster |
+| S\_consensus | 25 | Max distance between each contributing device's dominant supported cluster centroid (single device: 12.5) |
+| S\_bssid | 20 | Non-hotspot BSSIDs in the anchor cluster and their active days |
+| S\_depth | 15 | Distinct device-days in the anchor cluster |
+| S\_precision | 10 | Mean accuracy of anchor fix events |
 
-### 5.3 BSSID Coherence Penalty Factor (P\_coherence)
-The BSSID Coherence Penalty measures spatial agreement across all BSSIDs associated with a facility (D\_bssid\_max in meters). It is applied strictly to Track 2 (Hardware Health) to penalize roaming hardware without degrading Track 1 (Location Truth):
+Breakpoints are on the [Parameters](parameters.md) page.
 
-$$P_{\text{coherence}} = 
-\begin{cases} 
-1.0, & \text{if } D_{\text{bssid_max}} \le 1000\text{m } \text{(Tight Alignment)} \\[1ex]
-1.0 - 0.5 \times \left( \frac{D_{\text{bssid_max}} - 1000}{1000} \right), & \text{if } 1000\text{m} < D_{\text{bssid_max}} \le 2000\text{m} \\[1ex]
-0.1, & \text{if } D_{\text{bssid_max}} > 2000\text{m } \text{(Severe BSSID Split)}
-\end{cases}$$
+### 6.2 Track 1: Location Truth
 
-$$\text{Track 1 (Location Confidence Score)} = S_{\text{raw}}$$
-
-$$\text{Track 2 (Hardware Health Score)} = S_{\text{raw}} \times P_{\text{coherence}}$$
-
-## 6\. Two-Track Decoupled Taxonomy Engine Flowchart
-The parallel evaluation flowchart demonstrates how Track 1 (Location Truth) and Track 2 (Hardware Integrity) execute independently:
+The flag is set by distance alone. Confidence is a separate tier, and the recommended action combines both.
 
 ```mermaid
 graph TD
-    IN["<div style='min-width: 300px; text-align: center;'><b>[ Facility Telemetry Input ]</b></div>"]
+    IN["Facility"]
+    SUP{"Support &ge; min_support_device_days?"}
+    PIN{"Govt pin available?"}
+    ANC{"Supported anchor?"}
+    AMBQ{"Strategies resolved?"}
+    D{"D_govt band"}
 
-    IN --> T1
-    IN --> T2
+    F_INS["<b>INSUFFICIENT_DATA</b>"]
+    F_NOPIN["<b>NO_GOVT_PIN_AVAILABLE</b>"]
+    F_UNS["<b>UNSTABLE_MOBILE_ONLY</b>"]
+    F_AMB["<b>AMBIGUOUS_MULTI_CLUSTER</b>"]
+    F_ACC["<b>VERIFIED_ACCURATE</b>"]
+    F_DIS["<b>CAMPUS_DISPERSION</b>"]
+    F_MIS["<b>GOVT_PIN_MISMATCH</b>"]
 
-    subgraph Track1 ["TRACK 1: LOCATION TRUTH ENGINE"]
-        T1["<b>TRACK 1: LOCATION TRUTH ENGINE</b><br/><i>(Evaluates Dominant Empirical Cluster)</i>"]
-        S_RAW["Calculate Raw Score (S_raw)"]
-        PIN_CHECK{"Govt Registry Pin<br/>Available?"}
-        
-        %% Decisions
-        C1{"Score &ge; 70 &<br/>D_govt &le; 200m?"}
-        C2{"Score &ge; 70 &<br/>D_govt > 500m?"}
-        C3{"Score &ge; 60 &<br/>200m < D_govt &le; 500m?"}
-        C4{"Score < 50?"}
-
-        %% Output Flags
-        F_NO_PIN["<b>NO_GOVT_PIN_AVAILABLE</b>"]
-        F_ACC["<b>VERIFIED_ACCURATE</b>"]
-        F_MIS["<b>GOVT_PIN_MISMATCH</b>"]
-        F_DIS["<b>CAMPUS_DISPERSION</b>"]
-        F_UNS["<b>UNSTABLE_MOBILE_ONLY</b>"]
-        F_MIN["<b>MINOR_DISCREPANCY</b>"]
-
-        T1 --> S_RAW --> PIN_CHECK
-        PIN_CHECK -->|NO| F_NO_PIN
-        PIN_CHECK -->|YES| C1
-        
-        C1 -->|YES| F_ACC
-        C1 -->|NO| C2
-        
-        C2 -->|YES| F_MIS
-        C2 -->|NO| C3
-        
-        C3 -->|YES| F_DIS
-        C3 -->|NO| C4
-        
-        C4 -->|YES| F_UNS
-        C4 -->|NO| F_MIN
-    end
-
-    subgraph Track2 ["TRACK 2: HARDWARE INTEGRITY ENGINE"]
-        T2["<b>TRACK 2: HARDWARE INTEGRITY ENGINE</b><br/><i>(Evaluates Device & BSSID Reliability)</i>"]
-        P_COH["Calculate BSSID Coherence Penalty<br/>(P_coherence)"]
-        H_SCORE["Hardware Health Score = S_raw * P_coherence"]
-        
-        ANOM["<b>Evaluates Hardware Anomalies:</b><br/>• D_bssid_max > 2km? &rarr; Tag: <code>BSSID_SPATIAL_SPLIT</code><br/>• Hotspot Scans &ge; 50%? &rarr; Tag: <code>HOTSPOT_TETHERED_FACILITY</code>"]
-        
-        OUT_TAGS["<b>Output List:</b><br/><code>hardware_anomaly_tags</code>"]
-
-        T2 --> P_COH --> H_SCORE --> ANOM --> OUT_TAGS
-    end
+    IN --> SUP
+    SUP -->|No| F_INS
+    SUP -->|Yes| ANC
+    ANC -->|No| F_UNS
+    ANC -->|Yes| PIN
+    PIN -->|No| F_NOPIN
+    PIN -->|Yes| AMBQ
+    AMBQ -->|No| F_AMB
+    AMBQ -->|Yes| D
+    D -->|"&le; verified_max_m"| F_ACC
+    D -->|"verified_max_m < D &le; mismatch_min_m"| F_DIS
+    D -->|"> mismatch_min_m"| F_MIS
 ```
 
-## 7\. Decoupled Taxonomy Output Matrix
-### 7.1 Track 1: Primary Location Verification Flags (Pillar 3)
+**Confidence tier** (`location_confidence_level`) from S\_raw: `HIGH`, `MEDIUM`, `LOW`.
 
-| Location Flag | Trigger Conditions | Real-World Operational Interpretation | Recommended Action |
-| ---| ---| ---| --- |
-| `VERIFIED_ACCURATE` | S\_raw >= 70.0 AND D\_govt <= 200m | Field telemetry confirms official government registry coordinates. High-confidence baseline established. | None. Facility baseline verified. |
-| `GOVT_PIN_MISMATCH` | S\_raw >= 70.0 AND D\_govt > 500m | Empirical telemetry is spatially stable, but government coordinates are significantly inaccurate (e.g., pinned to village center or district office). | Submit spatial coordinate correction to Ministry. |
-| `CAMPUS_DISPERSION` | S\_raw >= 60.0 AND 200m < D\_govt <= 500m | Telemetry confirms presence near the government pin, but spatial spread reflects a large multi-building campus, sports field, or peripheral annex. | Retain location as valid; flag for minor boundary refinement. |
-| `UNSTABLE_MOBILE_ONLY` | S\_raw < 50.0 | Telemetry is too sparse or spatially volatile to guarantee physical building coordinates. | Needs fixed monitoring hardware. |
-| `NO_GOVT_PIN_AVAILABLE` | Official Govt Coordinates missing/null | Empirical centroid calculated successfully, but no government metadata exists for comparison. | Append empirical centroid to registry. |
-| `INSUFFICIENT_DATA` | Total valid spatial scans < 5 in the observation window | Fewer than 5 valid spatial scans recorded in the observation window. | Await additional telemetry syncs. |
+**Recommended action** (`recommended_action`). Rules are checked in order and the first match wins:
 
-### 7.2 Track 2: Secondary Hardware Anomaly Tags (Pillars 1 & 2)
+| # | Condition | Action |
+| --- | --- | --- |
+| 1 | `INSUFFICIENT_DATA` or `UNSTABLE_MOBILE_ONLY` | `AWAIT_DATA` |
+| 2 | `AMBIGUOUS_MULTI_CLUSTER` | `FIELD_VERIFY` |
+| 3 | Confidence `LOW` | `AWAIT_DATA` |
+| 4 | `VERIFIED_ACCURATE` | `NONE` |
+| 5 | `GOVT_PIN_MISMATCH`, confidence `HIGH`, anchor seen by 2+ devices | `SUBMIT_CORRECTION` |
+| 6 | Anything else (`GOVT_PIN_MISMATCH`, `CAMPUS_DISPERSION`, `NO_GOVT_PIN_AVAILABLE`) | `FIELD_VERIFY` |
 
-| Anomaly Tag | Trigger Conditions | Real-World Operational Interpretation | Recommended Action |
-| ---| ---| ---| --- |
-| `BSSID_SPATIAL_SPLIT` | Max pairwise BSSID distance D\_bssid\_max > 2000m (2km) | Hardware monitoring devices registered to this facility operate across two or more distinct geographic locations (e.g., laptop transported between school and regional office). | Flag monitoring setup as mobile. Dedicated fixed hardware missing at the school. |
-| `HOTSPOT_TETHERED_FACILITY` | Active Wi-Fi scans matching consumer hotspot patterns or multi-day drift > 1km are >= 50% | Entity relies primarily on staff personal smartphones or mobile hotspots for connectivity rather than fixed ISP infrastructure. | Flag connectivity as temporary/mobile tethered. Exclude mobile SSIDs from building checks. |
+**Scoring cluster.** S\_raw is computed on the anchor cluster. For `AMBIGUOUS_MULTI_CLUSTER`, which has no anchor, it is computed on the `TELEMETRY_DOMINANCE` candidate and reported as `score_cluster_id`.
 
-## 8\. Summary of Research Data Dictionary Rules
-*   **Measurement Source Filtering:** Raw measurement payloads use `source = 'DailyCheckApp'` in the database. Data is filtered on this field for app-specific speedtest analysis.
-*   **Timezone Standardization:** Raw UTC timestamps (`created_timestamp`) always converted to local device time before executing operational hour (08:00–19:59) models.
-*   **Strict No-IP Fallback Policy:** IP-based geolocation is never used by GigaMeter. Always filter out null coordinates (`WHERE detected_latitude IS NOT NULL`) before spatial calculations. IP fallback imputation NEVER been attempted.
+`govt_displacement_m` is reported whenever an anchor and a pin exist, whatever the flag. For `AMBIGUOUS_MULTI_CLUSTER`, `candidate_govt_displacement_m` gives each candidate's distance instead.
+
+A stationary single-device anchor proves the device does not move, not that it sits in the facility. This is why single-device mismatches route to `FIELD_VERIFY`.
+
+### 6.3 Track 2: Hardware Integrity
+
+$$\text{Hardware Health} = S_{\text{raw}} \times P_{\text{coherence}}$$
+
+$D_{\text{split}}$ is the maximum distance between **supported** facility clusters. Unsupported stray readings do not contribute.
+
+$$P_{\text{coherence}} = 
+\begin{cases} 
+1.0, & \text{if } D_{\text{split}} \le \text{coherence\_full\_m} \\[1ex]
+1.0 - 0.5 \times \left( \frac{D_{\text{split}} - \text{coherence\_full\_m}}{\text{split\_m} - \text{coherence\_full\_m}} \right), & \text{if } \text{coherence\_full\_m} < D_{\text{split}} \le \text{split\_m} \\[1ex]
+\text{coherence\_floor}, & \text{if } D_{\text{split}} > \text{split\_m}
+\end{cases}$$
+
+| Anomaly Tag | Trigger |
+| --- | --- |
+| `BSSID_SPATIAL_SPLIT` | $D_{\text{split}}$ > `split_m` |
+| `HOTSPOT_TETHERED_FACILITY` | Share of non-carried fix events tagged `is_mobile_hotspot` &ge; `hotspot_share_min` |
+| `COMMUTER_DEVICE` | At least one contributing device is `COMMUTER` |
+| `RELOCATED_DEVICE` | At least one device is `RELOCATED` |
+
+### 6.4 Track 3: Entity Attribution
+
+Track 3 never changes the Track 1 flag. Its only interaction with Track 1 is the registry-name tie-break in Section 5.4, which is recorded in `anchor_resolved_by`.
+
+| Field | Meaning |
+| --- | --- |
+| `ssid_name_match` | Anchor SSIDs match the registered entity name (Section 5.4 rule) |
+| `nearest_other_entity_id`, `nearest_other_entity_distance_m` | Closest official pin of a *different* entity in the same country table |
+
+| Attribution Flag | Trigger |
+| --- | --- |
+| `CONSISTENT` | `ssid_name_match` is true, or this entity's pin is the nearest official pin to the anchor and within `mismatch_min_m` of it |
+| `OTHER_ENTITY_NEARBY` | Not `CONSISTENT`, and another entity's pin is within `other_entity_radius_m` of the anchor |
+| `UNRESOLVED` | Neither, or the facility has no anchor |
+
+The `mismatch_min_m` condition stops a far-off pin from counting as "nearest" only because no other pin is close.
+
+Track 3 needs the country table of official pins, loaded from the same Delta Sharing source the loader reads (`load_entity_pins`), or passed in directly. Without it only the pins of facilities in the telemetry are known, and `entity_pins_source` records which was used. The canonical telemetry frame and its column contract do not change.
+
+## 7\. Output Schema
+
+```json title="Facility Evaluation Payload (v0.3)"
+{
+  "school_id_giga": "SCH_12345",
+  "school_name": "…",
+  "methodology_version": "0.3",
+  "config_hash": "…",
+
+  "location_verification_flag": "GOVT_PIN_MISMATCH",
+  "location_confidence_score": 62.7,
+  "location_confidence_level": "MEDIUM",
+  "recommended_action": "FIELD_VERIFY",
+  "govt_displacement_m": 14812.5,
+  "candidate_govt_displacement_m": {"govt_proximity_anchor": 14812.5, "telemetry_dominance": 14812.5},
+  "empirical_latitude": 0.0,
+  "empirical_longitude": 0.0,
+  "govt_latitude": 0.0,
+  "govt_longitude": 0.0,
+  "anchor_cluster_id": 0,
+  "anchor_supported": true,
+  "anchor_bssids": ["…"],
+  "anchor_support_device_days": 2,
+  "anchor_support_devices": 1,
+  "score_cluster_id": 0,
+  "strategy_candidates": {"govt_proximity_anchor": 0, "telemetry_dominance": 0},
+  "strategy_agreement": true,
+  "anchor_resolved_by": "strategy_agreement",
+  "strategy_fallback_reason": "govt_proximity_anchor: no_cluster_within_govt_anchor_radius",
+
+  "hardware_health_score": 62.7,
+  "hardware_anomaly_tags": [],
+  "p_coherence": 1.0,
+  "split_distance_m": 0.0,
+  "hotspot_event_pct": 0.0,
+
+  "entity_attribution_flag": "UNRESOLVED",
+  "ssid_name_match": false,
+  "nearest_other_entity_id": "…",
+  "nearest_other_entity_distance_m": 361.6,
+  "entity_pins_source": "delta_sharing",
+
+  "distinct_devices": 1,
+  "stationary_devices_count": 1,
+  "commuter_devices_count": 0,
+  "relocated_devices_count": 0,
+  "high_mobility_devices_count": 0,
+  "insufficient_evidence_devices_count": 0,
+  "total_scans": 7,
+  "total_fix_events": 5,
+  "facility_device_days": 2,
+  "mean_accuracy_m": 35.2,
+  "score_breakdown": {"stability": 30.0, "consensus": 12.5, "bssid": 10.0, "depth": 3.0, "precision": 7.2}
+}
+```
+
+`run_national_facility_audit()` returns one such row per facility, with `score_breakdown` flattened into `score_<component>` columns and `hardware_anomaly_tags` joined into a string (`NONE` when empty).
+
+## 8\. Data Dictionary Rules
+
+*   **Measurement Source:** `source = 'DailyCheckApp'`. The app-version filter must compare versions numerically, not as strings.
+*   **Timezone:** UTC `created_timestamp` is converted to local time before any operational-hours or workday rule.
+*   **No-IP Policy:** Never impute `detected_*` from `client_info`. Drop null coordinates before spatial work.
+*   **Fix Events:** All spatial evidence is counted in fix events and device-days, never raw rows.
+*   **Missing `device_id`:** Older app versions do not send a device identifier. Their rows still count as facility evidence, with all of a facility's unidentified rows on one day treated as one device-day, so support is undercounted rather than inflated. They are not classified in Pillar 1 and do not count towards `distinct_devices`, which can therefore be 0 for a facility with supported clusters.
+*   **Missing `device_id`:** Older app versions do not send a device identifier. Their rows still count as facility evidence, treated as one unknown device per day, which can undercount but never inflates support. They are left out of device mobility and out of `distinct_devices`, so a facility can report many device-days and zero distinct devices.
+
+## 9\. Known Limitations
+
+*   **No term calendar:** School holidays are not modelled. Over a long holiday a staff laptop's home cluster can out-support the facility cluster, which surfaces as a strategy disagreement.
+*   **Fixed workdays:** `workdays` is one config value, not resolved per country.
+*   **Carried-fix cause:** Each test runs a fresh lookup and a failed lookup is not replaced by an earlier result, yet carried fixes are observed. Candidate causes are a Wi-Fi scan list returned from the operating system's cache (for example after sleep and resume) or caching of lookup results in the backend. Neither is confirmed, and the stored ledger does not include the nearby access-point list needed to tell them apart. The carried-fix rule is inferred from the data and does not depend on the cause. A lookup timestamp in the payload would make it observable; this is not planned for v0.3.
+*   **Stale but newly computed fixes:** The carried-fix rule only catches a fix that repeats an earlier answer exactly. If the first lookup after arriving at a new place returns a newly computed position for the previous place, nothing in the row tells it apart from a real reading. Such events stay in the evidence; they are usually single events, so support counting in device-days keeps them out of supported clusters.
+*   **SSID semantics:** SSIDs are user-set. Name matching is a tie-breaker and Track 3 evidence only.
+*   **Score double-count:** S\_bssid and S\_depth both reward active days. Kept unchanged pending calibration.
+*   **Country-wide pin offsets:** Each facility is compared with its own pin. If a whole registry is shifted, for example by a datum or projection error, every facility moves into the same distance band and the method reports many individual `CAMPUS_DISPERSION` or `GOVT_PIN_MISMATCH` flags instead of one registry-level problem. The [Research Log](research-log.md) records one such case.
+
+## 10\. Validation
+
+Each version is validated before it is frozen:
+
+1. Replay the previous and the current version on the same country ledger and publish the flag transition matrix.
+2. Check the [Worked Examples](../spatial/examples.md) against the measured outputs of the current version.
+3. Check every facility of several country ledgers against the Track 1 and action rules, and hand-review a random sample from each flag.
+4. Report how many BSSIDs lose their mobility tag after carried fixes are excluded.
+
+The replay is run with `scripts/replay_versions.py`, which runs both versions on the same ledger in separate processes and writes the comparison report. The v0.3 results are in the [Research Log](research-log.md#validation).

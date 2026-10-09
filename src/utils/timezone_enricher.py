@@ -147,25 +147,17 @@ def enrich_telemetry_with_local_time(
         df[timestamp_col], format="ISO8601", utc=True
     )
 
-    # Step 4: Convert to local time grouped by timezone for vectorized performance
-    def _convert_group(group: pd.DataFrame) -> pd.DataFrame:
-        tz_str = group.name
-        try:
-            group["local_created_timestamp"] = (
-                group["created_timestamp_utc"]
-                .dt.tz_convert(tz_str)
-                .dt.tz_localize(
-                    None
-                )  # Remove timezone offset for standard local arithmetic
-            )
-        except Exception:
-            group["local_created_timestamp"] = group[
-                "created_timestamp_utc"
-            ].dt.tz_localize(None)
-        return group
-
+    # Step 4: Convert to local time one timezone at a time
     print("Converting UTC timestamps to local device time...")
-    df = df.groupby("tz_name", group_keys=False).apply(_convert_group)
+    local = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+    for tz_str, index in df.groupby("tz_name").groups.items():
+        utc_values = df.loc[index, "created_timestamp_utc"]
+        try:
+            converted = utc_values.dt.tz_convert(tz_str).dt.tz_localize(None)
+        except Exception:
+            converted = utc_values.dt.tz_localize(None)
+        local.loc[index] = converted.astype("datetime64[ns]")
+    df["local_created_timestamp"] = local
 
     # Step 5: Derive Local Calendar & Operational Hours Features (Section 2.1 & 2.3)
     df["local_date"] = df["local_created_timestamp"].dt.date

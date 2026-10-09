@@ -1,35 +1,55 @@
 """
-Module: src/spatial_profiler.py
-Purpose: Spatial aggregation, BSSID fingerprinting, mobile hotspot detection,
-         and strategy-driven facility centroid resolution for GigaMeter telemetry.
-Rules: Aligned with GigaMeter Data Dictionary v2.2 (Pillars 1, 2, and 3).
+Module: src/spatial_intelligence/spatial_profiler.py
+Purpose: Pillar 2 spatial profiling. Tags mobile hotspots, clusters each
+         facility's fix events into observation clusters, and selects the
+         facility anchor with the configured strategies.
+Rules: Settings come from SpatialConfig. Evidence is counted in fix events
+       and device-days. A centroid is only ever computed inside one cluster;
+       no facility coordinate is an average across clusters.
 """
 
-import pandas as pd
-import numpy as np
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-
 from gigaspatial.processing import calculate_distance as haversine_distance_meters
 
 from src.utils.data_loader import TelemetryLoader
 
+from .config import (
+    DEFAULT_CONFIG,
+    STRATEGY_GOVT_PROXIMITY,
+    STRATEGY_STATIONARY_FIRST,
+    STRATEGY_TELEMETRY_DOMINANCE,
+    SpatialConfig,
+)
+from .fix_events import build_fix_event_table, mark_fix_events
+from .geo import dbscan_labels, haversine_m, max_pairwise_distance_m, weighted_centroid
+from .name_match import ssid_matches_name
+from .plot_utils import add_log_x_vline
+
+RESOLVED_BY_AGREEMENT = "strategy_agreement"
+RESOLVED_BY_SINGLE_STRATEGY = "single_strategy"
+RESOLVED_BY_NAME_MATCH = "ssid_name_match"
+RESOLVED_BY_UNRESOLVED = "unresolved"
+RESOLVED_BY_NO_CLUSTER = "no_cluster"
+
+FALLBACK_NO_GOVT_PIN = "no_govt_pin"
+FALLBACK_NO_CLUSTER_IN_RADIUS = "no_cluster_within_govt_anchor_radius"
+FALLBACK_NO_DEVICE_CLASSES = "no_device_classes"
+FALLBACK_NO_STATIONARY_EVIDENCE = "no_stationary_evidence"
+
 
 class ClusterResolutionStrategy(Enum):
-    """Primary Cluster Selection Strategies for BSSID Splits (> 2km)."""
+    """Anchor strategies. Values match the strategy names in `SpatialConfig`."""
 
-    TELEMETRY_DOMINANCE = (
-        "telemetry_dominance"  # Unbiased: Selects cluster with max operational scans
-    )
-    GOVT_PROXIMITY_ANCHOR = (
-        "govt_proximity_anchor"  # Prior-Informed: Uses govt pin as tie-breaker (<= 2km)
-    )
-    STATIONARY_FIRST = (
-        "stationary_first"  # Hardware-First: Prefers stationary hardware clusters
-    )
+    TELEMETRY_DOMINANCE = STRATEGY_TELEMETRY_DOMINANCE
+    GOVT_PROXIMITY_ANCHOR = STRATEGY_GOVT_PROXIMITY
+    STATIONARY_FIRST = STRATEGY_STATIONARY_FIRST
 
 
 def _extract_coord_tuples(df_subset: pd.DataFrame) -> List[Tuple[float, float]]:
@@ -37,23 +57,45 @@ def _extract_coord_tuples(df_subset: pd.DataFrame) -> List[Tuple[float, float]]:
     valid_mask = (
         df_subset["detected_latitude"].notna() & df_subset["detected_longitude"].notna()
     )
-    valid_coords = df_subset.loc[
-        valid_mask, ["detected_latitude", "detected_longitude"]
-    ]
+    valid_coords = df_subset.loc[valid_mask, ["detected_latitude", "detected_longitude"]]
     return [tuple(x) for x in valid_coords.to_numpy()]
+
+
+def is_locally_administered(bssid: Any) -> bool:
+    """True when the MAC address has the locally administered bit set."""
+    if not isinstance(bssid, str) or len(bssid) < 2:
+        return False
+    try:
+        return bool(int(bssid[:2], 16) & 0x02)
+    except ValueError:
+        return False
+
+
+def _first_valid(series: pd.Series) -> Any:
+    valid = series.dropna()
+    return valid.iloc[0] if not valid.empty else np.nan
+
+
+def _unique_values(series: pd.Series) -> List[Any]:
+    return sorted({v for v in series.dropna()})
 
 
 class SpatialProfiler:
     """
-    Spatial Analytics & BSSID Fingerprinting Engine for GigaMeter Telemetry.
-    Includes consumer mobile hotspot regex detection, multi-day spatial drift checks,
-    and configurable primary cluster resolution strategies.
-    """
+    Spatial analytics engine for GigaMeter telemetry.
 
-    HOTSPOT_REGEX_PATTERN = (
-        r"(?i)(iphone|android|galaxy|hotspot|teacher|pixel|redmi|tether|"
-        r"samsung|huawei|oppo|vivo|xiaomi|realme|mobicom|unitel|mifi)"
-    )
+    On load, every row is tagged with:
+
+    * `is_hotspot_ssid`: the SSID matches `config.hotspot_ssid_pattern`.
+    * `is_laa_bssid`: the BSSID is a locally administered MAC (evidence only).
+    * `is_mobile_bssid`: the BSSID's accuracy-gated, non-carried fix events
+      form two or more clusters that each span
+      `bssid_mobility_min_cluster_days`.
+    * `is_mobile_hotspot`: `is_hotspot_ssid` or `is_mobile_bssid`.
+
+    `build_facility_spatial_summary` then clusters each facility's
+    anchor-window fix events and selects one anchor cluster.
+    """
 
     def __init__(
         self,
@@ -67,14 +109,14 @@ class SpatialProfiler:
         timestamp_col: str = "created_timestamp",
         db: Any = None,
         delta_store: Any = None,
+        config: SpatialConfig = DEFAULT_CONFIG,
     ) -> None:
         """
-        Load a canonical telemetry frame and tag mobile hotspots.
+        Load a canonical telemetry frame, tag hotspots, and build fix events.
 
         Provide exactly one of `telemetry_df`, `file_path`, or `query_name`.
         School-pin merge and local-time enrichment are performed by
-        `TelemetryLoader` before hotspot tagging. `is_operational_hours` is
-        read from that frame.
+        `TelemetryLoader` before tagging.
 
         Args:
             telemetry_df: In-memory measurements.
@@ -87,7 +129,9 @@ class SpatialProfiler:
             db: Optional database client. Built from `.env` when a query needs one.
             delta_store: Optional Delta Sharing client. Built from `.env` when
                 school pins must be loaded.
+            config: Methodology settings.
         """
+        self.config = config
         self.df = TelemetryLoader().load(
             telemetry_df=telemetry_df,
             file_path=file_path,
@@ -101,63 +145,74 @@ class SpatialProfiler:
         )
         self._tag_mobile_hotspots()
 
-    def _tag_mobile_hotspots(self) -> None:
-        """
-        Detects consumer mobile hotspots via:
-        1. Case-insensitive SSID regex pattern matching.
-        2. BSSID multi-day spatial drift (> 1000m across active days).
-        """
-        ssid_col = "detected_wifi_ssid"
-        bssid_col = "detected_wifi_bssid"
+        self._bssid_profiles: Optional[pd.DataFrame] = None
+        self.facility_clusters: Optional[pd.DataFrame] = None
+        self.facility_events: Optional[pd.DataFrame] = None
 
-        # 1. Regex SSID pattern match
-        if ssid_col in self.df.columns:
-            self.df["is_hotspot_ssid"] = (
-                self.df[ssid_col]
+    # ------------------------------------------------------------------
+    # Hotspot and BSSID mobility
+    # ------------------------------------------------------------------
+    def _tag_mobile_hotspots(self) -> None:
+        df = self.df
+        if "detected_wifi_ssid" in df.columns:
+            ssid = df["detected_wifi_ssid"].astype(object)
+            df["is_hotspot_ssid"] = (
+                ssid.where(ssid.notna(), "")
                 .astype(str)
-                .str.contains(self.HOTSPOT_REGEX_PATTERN, regex=True, na=False)
+                .str.contains(self.config.hotspot_ssid_pattern, regex=True, na=False)
             )
         else:
-            self.df["is_hotspot_ssid"] = False
+            df["is_hotspot_ssid"] = False
 
-        # 2. Multi-day spatial drift check
-        hotspot_bssids = set()
-        if bssid_col in self.df.columns and "local_date" in self.df.columns:
-            valid_bssid_df = self.df[
-                self.df[bssid_col].notna()
-                & self.df["detected_latitude"].notna()
-                & self.df["detected_longitude"].notna()
-            ]
-
-            bssid_daily = (
-                valid_bssid_df.groupby([bssid_col, "local_date"])
-                .agg(
-                    mean_lat=("detected_latitude", "mean"),
-                    mean_lon=("detected_longitude", "mean"),
-                )
-                .reset_index()
-            )
-
-            for bssid, group in bssid_daily.groupby(bssid_col):
-                if len(group) > 1:
-                    lats, lons = group["mean_lat"].values, group["mean_lon"].values
-                    max_drift = max(
-                        haversine_distance_meters(lats[i], lons[i], lats[j], lons[j])
-                        for i in range(len(lats))
-                        for j in range(i + 1, len(lats))
-                    )
-                    if max_drift > 1000.0:  # Drift > 1km
-                        hotspot_bssids.add(bssid)
-
-        self.df["is_hotspot_drift"] = (
-            self.df[bssid_col].isin(hotspot_bssids)
-            if bssid_col in self.df.columns
+        has_bssid = "detected_wifi_bssid" in df.columns
+        df["is_laa_bssid"] = (
+            df["detected_wifi_bssid"].map(is_locally_administered).astype(bool)
+            if has_bssid
             else False
         )
-        self.df["is_mobile_hotspot"] = (
-            self.df["is_hotspot_ssid"] | self.df["is_hotspot_drift"]
-        )
 
+        valid = df[df["detected_latitude"].notna() & df["detected_longitude"].notna()]
+        rows = mark_fix_events(valid, self.config)
+        self.mobile_bssids = self._find_mobile_bssids(rows) if has_bssid else set()
+
+        df["is_mobile_bssid"] = (
+            df["detected_wifi_bssid"].isin(self.mobile_bssids) if has_bssid else False
+        )
+        df["is_mobile_hotspot"] = df["is_hotspot_ssid"] | df["is_mobile_bssid"]
+
+        tag_columns = ["is_hotspot_ssid", "is_laa_bssid", "is_mobile_bssid", "is_mobile_hotspot"]
+        rows[tag_columns] = df.loc[rows.index, tag_columns]
+        self.fix_event_rows = rows
+        self.fix_events = build_fix_event_table(rows, self.config, marked=True)
+
+    def _find_mobile_bssids(self, rows: pd.DataFrame) -> set:
+        cfg = self.config
+        events = build_fix_event_table(rows, cfg, marked=True)
+        if events.empty:
+            return set()
+        events = events[events["detected_wifi_bssid"].notna()]
+        if "detected_location_accuracy" in events.columns:
+            accuracy = pd.to_numeric(events["detected_location_accuracy"], errors="coerce")
+            events = events[accuracy <= cfg.bssid_mobility_accuracy_gate_m]
+        mobile = set()
+        for bssid, group in events.groupby("detected_wifi_bssid"):
+            if len(group) < 2 * cfg.bssid_mobility_min_samples:
+                continue
+            labels = dbscan_labels(
+                group["detected_latitude"],
+                group["detected_longitude"],
+                cfg.bssid_mobility_eps_m,
+                cfg.bssid_mobility_min_samples,
+            )
+            days = group.assign(_label=labels)
+            days = days[days["_label"] >= 0].groupby("_label")["local_date"].nunique()
+            if (days >= cfg.bssid_mobility_min_cluster_days).sum() >= 2:
+                mobile.add(bssid)
+        return mobile
+
+    # ------------------------------------------------------------------
+    # Governance and BSSID tables
+    # ------------------------------------------------------------------
     def summarize_governance(self) -> Dict[str, Any]:
         """
         Summarize ledger quality for the governance metric cards.
@@ -168,117 +223,118 @@ class SpatialProfiler:
         100.0 when the flag is absent or there are no rows.
 
         Returns:
-            Total records, ambient-scan and hotspot shares, mean location
-            accuracy in meters, and the operational-hours share.
+            Total records, ambient-scan and hotspot shares (split into SSID
+            pattern and moving router), mean and median location accuracy in
+            meters, the operational-hours share, fix-event and carried-row
+            counts, facility and device counts, and the local date range.
         """
         total_records = len(self.df)
-        if (
-            "detected_wifi_bssid" in self.df.columns
-            and total_records > 0
-        ):
-            ambient_scans = int(self.df["detected_wifi_bssid"].isna().sum())
-        else:
-            ambient_scans = 0
-        ambient_pct = (
-            round((ambient_scans / total_records) * 100.0, 1)
-            if total_records > 0
+
+        def pct(count: float) -> float:
+            return round(count / total_records * 100.0, 1) if total_records > 0 else 0.0
+
+        ambient_scans = (
+            int(self.df["detected_wifi_bssid"].isna().sum())
+            if "detected_wifi_bssid" in self.df.columns and total_records > 0
+            else 0
+        )
+        mean_accuracy_m = (
+            round(float(self.df["detected_location_accuracy"].mean()), 1)
+            if "detected_location_accuracy" in self.df.columns and total_records > 0
             else 0.0
         )
-
-        if "detected_location_accuracy" in self.df.columns and total_records > 0:
-            mean_accuracy_m = round(
-                float(self.df["detected_location_accuracy"].mean()), 1
-            )
-        else:
-            mean_accuracy_m = 0.0
-
-        if "is_operational_hours" in self.df.columns and total_records > 0:
-            operational_hours_pct = round(
-                (self.df["is_operational_hours"].sum() / total_records) * 100.0, 1
-            )
-        else:
-            operational_hours_pct = 100.0
-
-        if "is_mobile_hotspot" in self.df.columns and total_records > 0:
-            hotspot_scans = int(self.df["is_mobile_hotspot"].sum())
-        else:
-            hotspot_scans = 0
-        hotspot_pct = (
-            round((hotspot_scans / total_records) * 100.0, 1)
-            if total_records > 0
+        operational_hours_pct = (
+            pct(self.df["is_operational_hours"].sum())
+            if "is_operational_hours" in self.df.columns and total_records > 0
+            else 100.0
+        )
+        hotspot_scans = int(self.df["is_mobile_hotspot"].sum()) if total_records > 0 else 0
+        hotspot_ssid_scans = int(self.df["is_hotspot_ssid"].sum()) if total_records > 0 else 0
+        mobile_bssid_scans = int(self.df["is_mobile_bssid"].sum()) if total_records > 0 else 0
+        median_accuracy_m = (
+            round(float(self.df["detected_location_accuracy"].median()), 1)
+            if "detected_location_accuracy" in self.df.columns and total_records > 0
             else 0.0
         )
+        rows = self.fix_event_rows
+        carried_scans = int(rows["fix_carried"].sum()) if not rows.empty else 0
+        dates = self.df["local_date"].dropna() if "local_date" in self.df.columns else pd.Series(dtype=object)
 
         return {
             "total_records": total_records,
             "ambient_scans": ambient_scans,
-            "ambient_pct": ambient_pct,
+            "ambient_pct": pct(ambient_scans),
             "mean_accuracy_m": mean_accuracy_m,
+            "median_accuracy_m": median_accuracy_m,
             "operational_hours_pct": operational_hours_pct,
             "hotspot_scans": hotspot_scans,
-            "hotspot_pct": hotspot_pct,
+            "hotspot_pct": pct(hotspot_scans),
+            "hotspot_ssid_scans": hotspot_ssid_scans,
+            "hotspot_ssid_pct": pct(hotspot_ssid_scans),
+            "mobile_bssid_scans": mobile_bssid_scans,
+            "mobile_bssid_pct": pct(mobile_bssid_scans),
+            "mobile_bssids": len(self.mobile_bssids),
+            "total_fix_events": int(len(self.fix_events)),
+            "carried_scans": carried_scans,
+            "carried_pct": pct(carried_scans),
+            "facilities": int(self.df["school_id_giga"].nunique()) if total_records > 0 else 0,
+            "devices": int(self.df["device_id"].nunique()) if "device_id" in self.df.columns else 0,
+            "first_date": dates.min() if not dates.empty else None,
+            "last_date": dates.max() if not dates.empty else None,
         }
 
     def build_bssid_profiles(self) -> pd.DataFrame:
         """
-        Pillar 2: BSSID-Level Infrastructure Profiling.
-        Groups strictly by school and non-null BSSIDs.
-        Extracts coordinate tuples and operational hours distributions.
+        One row per school and non-null BSSID.
+
+        Returns:
+            Observation, fix-event, and carried counts, active days, devices,
+            operational-hours split, mean accuracy, hotspot and mobility flags,
+            and the BSSID's coordinate tuples.
         """
+        if self._bssid_profiles is not None:
+            return self._bssid_profiles
         bssid_col = "detected_wifi_bssid"
-        ssid_col = "detected_wifi_ssid"
-        signal_col = "wifi_signal_dbm"
         if bssid_col not in self.df.columns:
             return pd.DataFrame()
-
-        bssid_df = self.df[self.df[bssid_col].notna()].copy()
+        bssid_df = self.df[self.df[bssid_col].notna()]
         if bssid_df.empty:
             return pd.DataFrame()
 
-        profiles = []
-        grouped = bssid_df.groupby(["school_id_giga", bssid_col])
+        marked = self.fix_event_rows[self.fix_event_rows[bssid_col].notna()]
+        event_counts = (
+            marked[~marked["fix_carried"]]
+            .groupby(["school_id_giga", bssid_col])["fix_event_id"]
+            .nunique()
+        )
+        carried_counts = marked.groupby(["school_id_giga", bssid_col])["fix_carried"].sum()
 
-        for (school_id, bssid), group in grouped:
+        profiles = []
+        for (school_id, bssid), group in bssid_df.groupby(["school_id_giga", bssid_col]):
             total_obs = len(group)
             op_obs = int(group["is_operational_hours"].sum())
             coord_tuples = _extract_coord_tuples(group)
-
+            ssids = group["detected_wifi_ssid"].dropna() if "detected_wifi_ssid" in group else pd.Series(dtype=object)
             profiles.append(
                 {
                     "school_id_giga": school_id,
                     "detected_wifi_bssid": bssid,
-                    "last_known_ssid": (
-                        group[ssid_col].dropna().iloc[-1]
-                        if ssid_col in group.columns
-                        and not group[ssid_col].dropna().empty
-                        else None
-                    ),
+                    "last_known_ssid": ssids.iloc[-1] if not ssids.empty else None,
                     "is_mobile_hotspot": bool(group["is_mobile_hotspot"].any()),
-                    "distinct_devices": (
-                        int(group["device_id"].nunique())
-                        if "device_id" in group.columns
-                        else 1
-                    ),
+                    "is_mobile_bssid": bool(group["is_mobile_bssid"].any()),
+                    "is_laa_bssid": bool(group["is_laa_bssid"].any()),
+                    "distinct_devices": int(group["device_id"].nunique()),
                     "total_observations": total_obs,
+                    "fix_events": int(event_counts.get((school_id, bssid), 0)),
+                    "carried_observations": int(carried_counts.get((school_id, bssid), 0)),
                     "days_active": (
-                        int(group["local_date"].nunique())
-                        if "local_date" in group.columns
-                        else 1
+                        int(group["local_date"].nunique()) if "local_date" in group.columns else 1
                     ),
-                    "first_seen_utc": (
-                        group["created_timestamp"].min()
-                        if "created_timestamp" in group.columns
-                        else None
-                    ),
-                    "last_seen_utc": (
-                        group["created_timestamp"].max()
-                        if "created_timestamp" in group.columns
-                        else None
-                    ),
+                    "first_seen_utc": group["created_timestamp"].min(),
+                    "last_seen_utc": group["created_timestamp"].max(),
                     "avg_signal_dbm": (
-                        round(float(group[signal_col].mean()), 2)
-                        if signal_col in group.columns
-                        and group[signal_col].notna().any()
+                        round(float(group["wifi_signal_dbm"].mean()), 2)
+                        if "wifi_signal_dbm" in group.columns and group["wifi_signal_dbm"].notna().any()
                         else np.nan
                     ),
                     "operational_hours_obs": op_obs,
@@ -294,218 +350,360 @@ class SpatialProfiler:
                 }
             )
 
-        return (
+        self._bssid_profiles = (
             pd.DataFrame(profiles)
-            .sort_values(
-                by=["school_id_giga", "total_observations"], ascending=[True, False]
-            )
+            .sort_values(by=["school_id_giga", "total_observations"], ascending=[True, False])
             .reset_index(drop=True)
         )
+        return self._bssid_profiles
 
-    def build_facility_spatial_summary(
-        self,
-        strategy: ClusterResolutionStrategy = ClusterResolutionStrategy.GOVT_PROXIMITY_ANCHOR,
-    ) -> pd.DataFrame:
-        """
-        Resolve an empirical facility centroid for each school.
+    # ------------------------------------------------------------------
+    # Facility observation clusters
+    # ------------------------------------------------------------------
+    def _anchor_window_events(self) -> pd.DataFrame:
+        events = self.fix_events
+        if events.empty:
+            return events.copy()
+        mask = events["is_workday"].astype(bool)
+        if "is_operational_hours" in events.columns:
+            mask &= events["is_operational_hours"].eq(True)
+        return events[mask].copy()
 
-        Uses valid API coordinates and the chosen strategy when BSSID splits
-        exceed 2 km. Official pins are read from `govt_latitude` and
-        `govt_longitude` already merged onto the telemetry frame.
+    def _cluster_facility(
+        self, events: pd.DataFrame, school_name: Any
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        cfg = self.config
+        events = events.copy()
+        events["facility_cluster_id"] = dbscan_labels(
+            events["detected_latitude"], events["detected_longitude"], cfg.anchor_eps_m, 1
+        )
+        events["_device_day"] = list(zip(events["device_id"], events["local_date"]))
+        matching_ssids = [
+            ssid
+            for ssid in events["detected_wifi_ssid"].dropna().unique()
+            if ssid_matches_name([ssid], school_name, cfg)
+        ]
+        events["_name_match"] = events["detected_wifi_ssid"].isin(matching_ssids)
+        accuracy = events.get("detected_location_accuracy")
 
-        Args:
-            strategy: Primary cluster selection mode for BSSID splits.
-
-        Returns:
-            One row per school with centroid, government displacement, and
-            hotspot diagnostics. Empty when no valid coordinates remain.
-        """
-        # Strict No-IP Fallback: Filter out null coordinates
-        valid_geo = self.df[
-            self.df["detected_latitude"].notna() & self.df["detected_longitude"].notna()
-        ].copy()
-
-        if valid_geo.empty:
-            return pd.DataFrame()
-
-        if "detected_wifi_bssid" not in valid_geo.columns:
-            valid_geo["detected_wifi_bssid"] = np.nan
-        bssid_col = "detected_wifi_bssid"
-
-        summaries = []
-        for school_id, group in valid_geo.groupby("school_id_giga"):
-            govt_lat = (
-                group["govt_latitude"].dropna().iloc[0]
-                if "govt_latitude" in group.columns
-                and not group["govt_latitude"].dropna().empty
-                else np.nan
+        rows = []
+        for cluster_id, group in events.groupby("facility_cluster_id"):
+            lat, lon = weighted_centroid(
+                group["detected_latitude"],
+                group["detected_longitude"],
+                accuracy.loc[group.index] if accuracy is not None else None,
+                cfg.accuracy_floor_m,
             )
-            govt_lon = (
-                group["govt_longitude"].dropna().iloc[0]
-                if "govt_longitude" in group.columns
-                and not group["govt_longitude"].dropna().empty
-                else np.nan
-            )
-
-            # Group scans by BSSID to evaluate spatial clusters
-            bssid_clusters = []
-            for bssid, b_group in group.groupby(bssid_col, dropna=False):
-                lats, lons = (
-                    b_group["detected_latitude"].values,
-                    b_group["detected_longitude"].values,
-                )
-                accs = (
-                    b_group["detected_location_accuracy"].values
-                    if "detected_location_accuracy" in b_group.columns
-                    else np.ones(len(b_group)) * 20.0
-                )
-                weights = 1.0 / np.square(np.maximum(accs, 1.0))
-
-                c_lat = float(np.sum(lats * weights) / np.sum(weights))
-                c_lon = float(np.sum(lons * weights) / np.sum(weights))
-                op_scans = int(b_group["is_operational_hours"].sum())
-
-                bssid_clusters.append(
-                    {
-                        "bssid": bssid,
-                        "centroid_lat": c_lat,
-                        "centroid_lon": c_lon,
-                        "op_scans": op_scans,
-                        "total_scans": len(b_group),
-                        "is_hotspot": bool(b_group["is_mobile_hotspot"].any()),
-                    }
-                )
-
-            clusters_df = pd.DataFrame(bssid_clusters)
-
-            # Evaluate max pairwise BSSID distance
-            max_bssid_dist_m = 0.0
-            if len(clusters_df) > 1:
-                c_lats, c_lons = (
-                    clusters_df["centroid_lat"].values,
-                    clusters_df["centroid_lon"].values,
-                )
-                max_bssid_dist_m = max(
-                    haversine_distance_meters(
-                        c_lats[i], c_lons[i], c_lats[j], c_lons[j]
-                    )
-                    for i in range(len(c_lats))
-                    for j in range(i + 1, len(c_lats))
-                )
-
-            # -------------------------------------------------------------------
-            # Primary Cluster Selection Strategy Engine
-            # -------------------------------------------------------------------
-            selected_cluster = None
-
-            if (
-                strategy == ClusterResolutionStrategy.GOVT_PROXIMITY_ANCHOR
-                and pd.notna(govt_lat)
-            ):
-                # Filter clusters within 2km of Government Pin
-                clusters_df["dist_to_govt_m"] = clusters_df.apply(
-                    lambda r: haversine_distance_meters(
-                        r["centroid_lat"], r["centroid_lon"], govt_lat, govt_lon
-                    ),
-                    axis=1,
-                )
-                prox_candidates = clusters_df[clusters_df["dist_to_govt_m"] <= 2000.0]
-                if not prox_candidates.empty:
-                    selected_cluster = prox_candidates.sort_values(
-                        by="op_scans", ascending=False
-                    ).iloc[0]
-
-            if selected_cluster is None:
-                # Fallback / Unbiased Strategy: Max operational scans (excluding mobile hotspots if fixed exists)
-                fixed_clusters = clusters_df[~clusters_df["is_hotspot"]]
-                target_pool = (
-                    fixed_clusters if not fixed_clusters.empty else clusters_df
-                )
-                selected_cluster = target_pool.sort_values(
-                    by="op_scans", ascending=False
-                ).iloc[0]
-
-            # Compute empirical facility location based on selected primary cluster
-            primary_bssid = selected_cluster["bssid"]
-            primary_records = (
-                group[group[bssid_col] == primary_bssid]
-                if pd.notna(primary_bssid)
-                else group
-            )
-
-            p_lats = primary_records["detected_latitude"].values
-            p_lons = primary_records["detected_longitude"].values
-            p_accs = (
-                primary_records["detected_location_accuracy"].values
-                if "detected_location_accuracy" in primary_records.columns
-                else np.ones(len(primary_records)) * 20.0
-            )
-            p_weights = 1.0 / np.square(np.maximum(p_accs, 1.0))
-
-            empirical_lat = float(np.sum(p_lats * p_weights) / np.sum(p_weights))
-            empirical_lon = float(np.sum(p_lons * p_weights) / np.sum(p_weights))
-
-            govt_disp_m = haversine_distance_meters(
-                empirical_lat, empirical_lon, govt_lat, govt_lon
-            )
-            hotspot_scan_pct = round(
-                (group["is_mobile_hotspot"].sum() / len(group)) * 100.0, 1
-            )
-
-            summaries.append(
+            ssids = _unique_values(group["detected_wifi_ssid"])
+            bssids = _unique_values(group["detected_wifi_bssid"])
+            hotspot = group["is_mobile_hotspot"] if "is_mobile_hotspot" in group else pd.Series(False, index=group.index)
+            rows.append(
                 {
-                    "school_id_giga": school_id,
-                    "school_name": (
-                        group["school_name"].iloc[0]
-                        if "school_name" in group.columns
-                        else school_id
+                    "facility_cluster_id": int(cluster_id),
+                    "centroid_lat": lat,
+                    "centroid_lon": lon,
+                    "device_days": int(group["_device_day"].nunique()),
+                    "devices": int(group["device_id"].nunique()),
+                    "events": int(len(group)),
+                    "first_date": group["local_date"].min(),
+                    "last_date": group["local_date"].max(),
+                    "bssids": bssids,
+                    "ssids": ssids,
+                    "device_ids": _unique_values(group["device_id"]),
+                    "hotspot_share": round(float(hotspot.astype(bool).mean()), 3),
+                    "mean_accuracy_m": (
+                        round(float(pd.to_numeric(accuracy.loc[group.index]).mean()), 2)
+                        if accuracy is not None
+                        else np.nan
                     ),
-                    "total_valid_geo_records": len(group),
-                    "ambient_scan_count": (
-                        int(group[bssid_col].isna().sum())
-                        if bssid_col in group.columns
-                        else 0
+                    "name_match_device_days": int(
+                        group.loc[group["_name_match"], "_device_day"].nunique()
                     ),
-                    "distinct_devices": (
-                        int(group["device_id"].nunique())
-                        if "device_id" in group.columns
-                        else 1
-                    ),
-                    "empirical_centroid_lat": empirical_lat,
-                    "empirical_centroid_lon": empirical_lon,
-                    "govt_latitude": govt_lat,
-                    "govt_longitude": govt_lon,
-                    "govt_displacement_m": (
-                        round(govt_disp_m, 2) if pd.notna(govt_disp_m) else np.nan
-                    ),
-                    "max_bssid_dist_m": round(max_bssid_dist_m, 2),
-                    "hotspot_scan_pct": hotspot_scan_pct,
-                    "resolution_strategy_used": strategy.value,
-                    "mean_accuracy_m": round(float(np.mean(p_accs)), 2),
-                    "coord_tuples": _extract_coord_tuples(group),
                 }
             )
+        clusters = pd.DataFrame(rows).set_index("facility_cluster_id", drop=False)
+        clusters.index.name = None
+        clusters["is_supported"] = clusters["device_days"] >= cfg.min_support_device_days
+        clusters["is_hotspot_cluster"] = clusters["hotspot_share"] >= cfg.hotspot_share_min
+        clusters["ssid_name_match"] = (
+            clusters["name_match_device_days"] >= cfg.min_support_device_days
+        )
+        return clusters, events.drop(columns=["_device_day", "_name_match"])
 
+    @staticmethod
+    def _rank(clusters: pd.DataFrame, support: Optional[pd.Series] = None) -> pd.DataFrame:
+        ranked = clusters.copy()
+        ranked["_support"] = support if support is not None else ranked["device_days"]
+        return ranked.sort_values(
+            by=["_support", "devices", "events", "facility_cluster_id"],
+            ascending=[False, False, False, True],
+        )
+
+    def _candidate_pool(self, clusters: pd.DataFrame) -> pd.DataFrame:
+        pool = clusters[clusters["is_supported"]]
+        if pool.empty:
+            pool = clusters
+        fixed = pool[~pool["is_hotspot_cluster"]]
+        return fixed if not fixed.empty else pool
+
+    def _select_candidates(
+        self,
+        pool: pd.DataFrame,
+        cluster_events: pd.DataFrame,
+        govt: Tuple[float, float],
+        eligible_event_ids: Optional[set],
+    ) -> Tuple[Dict[str, int], Dict[str, str]]:
+        cfg = self.config
+        dominance = int(self._rank(pool).index[0])
+        candidates: Dict[str, int] = {}
+        fallbacks: Dict[str, str] = {}
+
+        for strategy in cfg.strategies:
+            if strategy == STRATEGY_TELEMETRY_DOMINANCE:
+                candidates[strategy] = dominance
+            elif strategy == STRATEGY_GOVT_PROXIMITY:
+                if pd.isna(govt[0]) or pd.isna(govt[1]):
+                    candidates[strategy], fallbacks[strategy] = dominance, FALLBACK_NO_GOVT_PIN
+                    continue
+                in_range = pool[pool["dist_to_govt_m"] <= cfg.govt_anchor_radius_m]
+                if in_range.empty:
+                    candidates[strategy], fallbacks[strategy] = dominance, FALLBACK_NO_CLUSTER_IN_RADIUS
+                    continue
+                ranked = in_range.assign(_support=in_range["device_days"]).sort_values(
+                    by=["_support", "devices", "events", "dist_to_govt_m"],
+                    ascending=[False, False, False, True],
+                )
+                candidates[strategy] = int(ranked.index[0])
+            elif strategy == STRATEGY_STATIONARY_FIRST:
+                if eligible_event_ids is None:
+                    candidates[strategy], fallbacks[strategy] = dominance, FALLBACK_NO_DEVICE_CLASSES
+                    continue
+                eligible = cluster_events[cluster_events["fix_event_id"].isin(eligible_event_ids)]
+                support = (
+                    eligible.assign(_dd=list(zip(eligible["device_id"], eligible["local_date"])))
+                    .groupby("facility_cluster_id")["_dd"]
+                    .nunique()
+                    .reindex(pool.index)
+                    .fillna(0)
+                )
+                if (support > 0).sum() == 0:
+                    candidates[strategy], fallbacks[strategy] = dominance, FALLBACK_NO_STATIONARY_EVIDENCE
+                    continue
+                candidates[strategy] = int(self._rank(pool, support).index[0])
+        return candidates, fallbacks
+
+    @staticmethod
+    def _resolve(
+        candidates: Dict[str, int], clusters: pd.DataFrame
+    ) -> Tuple[Optional[int], bool, str]:
+        distinct = sorted(set(candidates.values()))
+        if len(distinct) == 1:
+            resolved_by = RESOLVED_BY_AGREEMENT if len(candidates) > 1 else RESOLVED_BY_SINGLE_STRATEGY
+            return distinct[0], True, resolved_by
+        matched = [c for c in distinct if clusters.loc[c, "ssid_name_match"]]
+        if len(matched) == 1:
+            return matched[0], False, RESOLVED_BY_NAME_MATCH
+        return None, False, RESOLVED_BY_UNRESOLVED
+
+    @staticmethod
+    def _eligible_event_ids(device_events: Optional[pd.DataFrame]) -> Optional[set]:
+        if device_events is None:
+            return None
+        if device_events.empty:
+            return set()
+        stationary = device_events["mobility_class"] == "STATIONARY"
+        commuter_home = (device_events["mobility_class"] == "COMMUTER") & device_events[
+            "is_dominant_cluster"
+        ].astype(bool)
+        return set(device_events.loc[stationary | commuter_home, "fix_event_id"])
+
+    def build_facility_spatial_summary(
+        self, device_events: Optional[pd.DataFrame] = None
+    ) -> pd.DataFrame:
+        """
+        Cluster each facility's anchor-window fix events and pick its anchor.
+
+        Anchor-window events are non-carried fix events inside operational
+        hours on configured workdays, from all devices, with or without a
+        BSSID. DBSCAN uses `anchor_eps_m` and a minimum of one event, so
+        every event belongs to a cluster and support decides which clusters
+        count. Each configured strategy proposes one cluster; agreement,
+        then a registry-name match, resolves the anchor. A cluster
+        name-matches when SSIDs matching the registry name are seen on at
+        least `min_support_device_days` of its device-days.
+
+        Args:
+            device_events: Output of `MobilityAnalyzer.build_device_event_table`.
+                Needed only for the `stationary_first` strategy.
+
+        Returns:
+            One row per facility with anchor centroid
+            (`empirical_centroid_lat`, `empirical_centroid_lon`), anchor
+            support, strategy candidates, agreement, resolution, split
+            distance between supported clusters, hotspot event share, and
+            provenance. The anchor centroid is empty when the strategies
+            disagree and no name match resolves them, or when the facility
+            has no anchor-window events. Cluster details are kept on
+            `self.facility_clusters` and labelled events on
+            `self.facility_events`.
+        """
+        cfg = self.config
+        eligible = self._eligible_event_ids(device_events)
+        window_events = self._anchor_window_events()
+        all_events = self.fix_events
+        valid_rows = self.fix_event_rows
+
+        summaries, cluster_tables, event_tables = [], [], []
+        for school_id, rows in valid_rows.groupby("school_id_giga"):
+            school_name = _first_valid(rows["school_name"]) if "school_name" in rows else np.nan
+            govt = (
+                _first_valid(rows["govt_latitude"]) if "govt_latitude" in rows else np.nan,
+                _first_valid(rows["govt_longitude"]) if "govt_longitude" in rows else np.nan,
+            )
+            school_events = all_events[all_events["school_id_giga"] == school_id]
+            facility_window = window_events[window_events["school_id_giga"] == school_id]
+
+            summary = {
+                "school_id_giga": school_id,
+                "school_name": school_name if pd.notna(school_name) else school_id,
+                "total_valid_geo_records": int(len(rows)),
+                "ambient_scan_count": (
+                    int(rows["detected_wifi_bssid"].isna().sum())
+                    if "detected_wifi_bssid" in rows
+                    else int(len(rows))
+                ),
+                "carried_scan_count": int(rows["fix_carried"].sum()),
+                "distinct_devices": int(rows["device_id"].nunique()),
+                "total_fix_events": int(len(school_events)),
+                "anchor_window_events": int(len(facility_window)),
+                "facility_device_days": int(
+                    facility_window[["device_id", "local_date"]].drop_duplicates().shape[0]
+                ),
+                "govt_latitude": govt[0],
+                "govt_longitude": govt[1],
+                "hotspot_event_pct": (
+                    round(float(school_events["is_mobile_hotspot"].mean()) * 100.0, 1)
+                    if not school_events.empty
+                    else 0.0
+                ),
+                "cluster_count": 0,
+                "supported_cluster_count": 0,
+                "split_distance_m": 0.0,
+                "anchor_cluster_id": None,
+                "anchor_supported": False,
+                "anchor_support_device_days": 0,
+                "anchor_support_devices": 0,
+                "anchor_support_events": 0,
+                "anchor_bssids": [],
+                "anchor_ssids": [],
+                "anchor_device_ids": [],
+                "ssid_name_match": False,
+                "empirical_centroid_lat": np.nan,
+                "empirical_centroid_lon": np.nan,
+                "mean_accuracy_m": np.nan,
+                "govt_displacement_m": np.nan,
+                "strategy_candidates": {},
+                "candidate_govt_displacement_m": {},
+                "strategy_agreement": False,
+                "anchor_resolved_by": RESOLVED_BY_NO_CLUSTER,
+                "strategy_fallback_reason": None,
+                **cfg.provenance(),
+            }
+
+            if not facility_window.empty:
+                clusters, labelled = self._cluster_facility(facility_window, school_name)
+                clusters["dist_to_govt_m"] = (
+                    haversine_m(clusters["centroid_lat"], clusters["centroid_lon"], govt[0], govt[1])
+                    if pd.notna(govt[0]) and pd.notna(govt[1])
+                    else np.nan
+                )
+                supported = clusters[clusters["is_supported"]]
+                pool = self._candidate_pool(clusters)
+                candidates, fallbacks = self._select_candidates(pool, labelled, govt, eligible)
+                anchor_id, agreement, resolved_by = self._resolve(candidates, clusters)
+
+                summary.update(
+                    {
+                        "cluster_count": int(len(clusters)),
+                        "supported_cluster_count": int(len(supported)),
+                        "split_distance_m": round(
+                            max_pairwise_distance_m(supported["centroid_lat"], supported["centroid_lon"]),
+                            1,
+                        ),
+                        "strategy_candidates": candidates,
+                        "candidate_govt_displacement_m": {
+                            s: (
+                                round(float(clusters.loc[c, "dist_to_govt_m"]), 1)
+                                if pd.notna(clusters.loc[c, "dist_to_govt_m"])
+                                else None
+                            )
+                            for s, c in candidates.items()
+                        },
+                        "strategy_agreement": agreement,
+                        "anchor_resolved_by": resolved_by,
+                        "strategy_fallback_reason": (
+                            "; ".join(f"{s}: {r}" for s, r in fallbacks.items()) or None
+                        ),
+                    }
+                )
+                if anchor_id is not None:
+                    anchor = clusters.loc[anchor_id]
+                    summary.update(
+                        {
+                            "anchor_cluster_id": int(anchor_id),
+                            "anchor_supported": bool(anchor["is_supported"]),
+                            "anchor_support_device_days": int(anchor["device_days"]),
+                            "anchor_support_devices": int(anchor["devices"]),
+                            "anchor_support_events": int(anchor["events"]),
+                            "anchor_bssids": anchor["bssids"],
+                            "anchor_ssids": anchor["ssids"],
+                            "anchor_device_ids": anchor["device_ids"],
+                            "ssid_name_match": bool(anchor["ssid_name_match"]),
+                            "empirical_centroid_lat": float(anchor["centroid_lat"]),
+                            "empirical_centroid_lon": float(anchor["centroid_lon"]),
+                            "mean_accuracy_m": anchor["mean_accuracy_m"],
+                            "govt_displacement_m": (
+                                round(float(anchor["dist_to_govt_m"]), 1)
+                                if pd.notna(anchor["dist_to_govt_m"])
+                                else np.nan
+                            ),
+                        }
+                    )
+                labelled["is_anchor_cluster"] = labelled["facility_cluster_id"] == anchor_id
+                clusters["is_anchor_cluster"] = clusters.index == anchor_id
+                clusters["is_candidate"] = clusters.index.isin(set(candidates.values()))
+                clusters.insert(0, "school_id_giga", school_id)
+                cluster_tables.append(clusters.reset_index(drop=True))
+                event_tables.append(labelled)
+
+            summaries.append(summary)
+
+        self.facility_clusters = (
+            pd.concat(cluster_tables, ignore_index=True) if cluster_tables else pd.DataFrame()
+        )
+        self.facility_events = (
+            pd.concat(event_tables, ignore_index=True) if event_tables else pd.DataFrame()
+        )
+        if not summaries:
+            return pd.DataFrame()
         return (
             pd.DataFrame(summaries)
             .sort_values(by="total_valid_geo_records", ascending=False)
             .reset_index(drop=True)
         )
 
+    # ------------------------------------------------------------------
+    # Plots
+    # ------------------------------------------------------------------
     def plot_signal_vs_accuracy_density(self) -> go.Figure:
         """
         Renders a 2D Scatter/Density plot mapping Wi-Fi Signal Strength (dBm)
         against Google API Precision Radius (meters).
         """
         signal_col = "wifi_signal_dbm"
-        if (
-            signal_col not in self.df.columns
-            or "detected_location_accuracy" not in self.df.columns
-        ):
+        if signal_col not in self.df.columns or "detected_location_accuracy" not in self.df.columns:
             fig = go.Figure()
-            fig.update_layout(
-                title="Wi-Fi Signal vs Precision metrics unavailable in dataset"
-            )
+            fig.update_layout(title="Wi-Fi Signal vs Precision metrics unavailable in dataset")
             return fig
 
         plot_df = self.df[
@@ -517,17 +715,78 @@ class SpatialProfiler:
             x=signal_col,
             y="detected_location_accuracy",
             color="is_mobile_hotspot",
-            color_discrete_map={True: "#d62728", False: "#1f77b4"},
+            color_discrete_map={True: "#c62828", False: "#1565c0"},
             opacity=0.6,
+            log_y=True,
             labels={
-                signal_col: "Wi-Fi Signal Strength (dBm)",
-                "detected_location_accuracy": "Google API Precision Radius (meters)",
-                "is_mobile_hotspot": "Consumer Mobile Hotspot",
+                signal_col: "Wi-Fi signal strength (dBm)",
+                "detected_location_accuracy": "Google accuracy radius (m, log scale)",
+                "is_mobile_hotspot": "Hotspot",
             },
-            title="Wi-Fi Signal Strength (dBm) vs Google API Location Precision Radius",
+        )
+        fig.update_layout(template="plotly_white", height=380, margin=dict(l=10, r=10, t=10, b=30))
+        return fig
+
+    def plot_accuracy_ecdf(self) -> go.Figure:
+        """
+        Cumulative share of rows by Google accuracy radius (log scale), with
+        the API-precision scoring bounds marked.
+        """
+        if "detected_location_accuracy" not in self.df.columns:
+            fig = go.Figure()
+            fig.update_layout(title="Accuracy radius unavailable in dataset")
+            return fig
+        accuracy = pd.to_numeric(self.df["detected_location_accuracy"], errors="coerce").dropna()
+        accuracy = accuracy.clip(lower=self.config.accuracy_floor_m)
+        fig = px.ecdf(
+            pd.DataFrame({"accuracy_m": accuracy}),
+            x="accuracy_m",
+            log_x=True,
+            labels={"accuracy_m": "Google accuracy radius (m, log scale)"},
+            height=380,
+        )
+        cfg = self.config
+        for x, name in ((cfg.precision_full_m, "full points"), (cfg.precision_zero_m, "zero points")):
+            add_log_x_vline(fig, x, f"{name} ({x:g} m)")
+        fig.update_layout(
+            template="plotly_white",
+            yaxis=dict(title="Share of rows", tickformat=".0%"),
+            margin=dict(l=10, r=10, t=10, b=30),
+        )
+        return fig
+
+    def plot_daily_coverage(self) -> go.Figure:
+        """Fix events and active devices per local date."""
+        events = self.fix_events
+        if events.empty or "local_date" not in events.columns:
+            fig = go.Figure()
+            fig.update_layout(title="No fix events available")
+            return fig
+        daily = (
+            events.groupby("local_date")
+            .agg(fix_events=("fix_event_id", "size"), devices=("device_id", "nunique"))
+            .reset_index()
+        )
+        daily["local_date"] = pd.to_datetime(daily["local_date"])
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=daily["local_date"], y=daily["fix_events"], name="Fix events", marker_color="#90caf9"))
+        fig.add_trace(
+            go.Scatter(
+                x=daily["local_date"],
+                y=daily["devices"],
+                name="Active devices",
+                yaxis="y2",
+                mode="lines",
+                line=dict(color="#1565c0", width=2),
+            )
         )
         fig.update_layout(
-            template="plotly_white", height=380, margin=dict(l=10, r=10, t=40, b=30)
+            template="plotly_white",
+            height=380,
+            yaxis=dict(title="Fix events"),
+            yaxis2=dict(title="Active devices", overlaying="y", side="right", showgrid=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0),
+            margin=dict(l=10, r=10, t=30, b=30),
         )
         return fig
 
@@ -567,7 +826,6 @@ class SpatialProfiler:
                 marker=dict(color="#d62728"),
             )
         )
-
         fig.update_layout(
             barmode="stack",
             title=f"BSSID Temporal Profile for Facility: {school_id_giga}",

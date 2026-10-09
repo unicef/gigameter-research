@@ -46,7 +46,8 @@ measurements_parsed AS (
 
     FROM gigameter_production_db.public.measurements m
     WHERE m.source = 'DailyCheckApp' 
-      AND m.app_version >= '{min_app_version}'
+      AND TRY(TRANSFORM(SPLIT(REGEXP_EXTRACT(m.app_version, '^[0-9]+(\.[0-9]+)*'), '.'), x -> CAST(x AS INTEGER)))
+          >= TRANSFORM(SPLIT('{min_app_version}', '.'), x -> CAST(x AS INTEGER))
       AND m.created_at >= CAST('{start_date}' AS TIMESTAMP)
       AND m.created_at <  CAST('{end_date}' AS TIMESTAMP)
       

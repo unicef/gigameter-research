@@ -28,7 +28,8 @@ schools_with_coords AS (
     INNER JOIN school_lookup s 
         ON m.giga_id_school = s.school_id_giga
     WHERE m.source = 'DailyCheckApp'
-      AND m.app_version >= '{min_app_version}'
+      AND TRY(TRANSFORM(SPLIT(REGEXP_EXTRACT(m.app_version, '^[0-9]+(\.[0-9]+)*'), '.'), x -> CAST(x AS INTEGER)))
+          >= TRANSFORM(SPLIT('{min_app_version}', '.'), x -> CAST(x AS INTEGER))
       -- Filter out unresolvable Google API requests (Strict No-IP Policy)
       AND m.detected_latitude IS NOT NULL 
       AND m.detected_longitude IS NOT NULL
