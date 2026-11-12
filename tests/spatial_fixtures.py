@@ -76,8 +76,8 @@ def example_a() -> pd.DataFrame:
     common = dict(
         school="SCH_A",
         device="DEV_A",
-        bssid="28:00:00:00:00:0a",
-        ssid="Home-4FF2-5G",
+        bssid="00:00:5e:00:53:01",
+        ssid="Home-XXXX-5G",
         govt=A_GOVT,
         school_name=A_NAME,
     )
@@ -102,7 +102,7 @@ B_SITE = offset(ORIGIN, 50_000, 0)
 B_GOVT = offset(B_SITE, 9_500, -13_700)
 B_APARTMENT = offset(B_SITE, -73_000, 47_000)
 B_NAME = "Shkolla 9-vjeçare Gamma"
-B_SCHOOL_BSSID = "e2:00:00:00:00:0b"
+B_SCHOOL_BSSID = "02:00:00:00:00:02"
 
 
 def example_b() -> pd.DataFrame:
@@ -118,7 +118,7 @@ def example_b() -> pd.DataFrame:
             for minute in (27, 33):
                 rows.append(
                     row(when=when.replace(hour=12, minute=minute), point=B_APARTMENT,
-                        accuracy=52.4, bssid="04:00:00:00:00:0b", ssid="APT_X", **common)
+                        accuracy=52.4, bssid="00:00:5e:00:53:03", ssid="APT_X", **common)
                 )
             continue
         point, acc = site_fix
@@ -143,9 +143,9 @@ C_GOVT = offset(ORIGIN, -50_000, 0)
 C_SCHOOL = offset(C_GOVT, 65, 300)
 C_HOME = offset(C_SCHOOL, -1_620, 2_760)
 C_NAME = "Shkolla 9-vjeçare Delta Epsilon"
-C_SCHOOL_BSSID = "e8:00:00:00:00:0c"
-C_HOME_BSSID = "50:00:00:00:00:0c"
-C_PHONE_BSSID = "6a:00:00:00:00:0c"
+C_SCHOOL_BSSID = "00:00:5e:00:53:04"
+C_HOME_BSSID = "00:00:5e:00:53:05"
+C_PHONE_BSSID = "02:00:00:00:00:06"
 
 
 def example_c() -> pd.DataFrame:

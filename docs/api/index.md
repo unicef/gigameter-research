@@ -12,7 +12,7 @@ Code is imported from the repository root, for example `from src.spatial_intelli
 from src.spatial_intelligence.facility_validator import FacilityValidator
 
 validator = FacilityValidator(
-    file_path="data/spatial_confidence_ledger/ALB/ALB_spatial_confidence_ledger_05-08-2026.csv",
+    file_path="data/spatial_confidence_ledger/XXX/XXX_ledger.csv",
 )
 
 audit = validator.run_national_facility_audit()   # one row per facility
@@ -32,7 +32,7 @@ Telemetry can come from three sources; give exactly one:
 | `file_path` | A `.csv` or `.parquet` ledger |
 | `query_name` and `query_params` | A SQL template under `sql/`, run against the database configured in `.env` |
 
-Official pins come from the ledger when it has `govt_latitude` and `govt_longitude`, otherwise from Delta Sharing with `country_iso3`. Track 3 needs the pins of every facility in the country, not only those in the telemetry; pass `country_iso3="ALB", load_entity_pins=True` to load them, or pass a table as `entity_pins`. `validator.entity_pins_source` records which was used.
+Official pins come from the ledger when it has `govt_latitude` and `govt_longitude`, otherwise from Delta Sharing with `country_iso3`. Track 3 needs the pins of every facility in the country, not only those in the telemetry; pass `country_iso3="XXX", load_entity_pins=True` to load them, or pass a table as `entity_pins`. `validator.entity_pins_source` records which was used.
 
 ## Processing Order
 

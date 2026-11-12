@@ -18,6 +18,7 @@ site/
 .cache/
 dev/
 data/
+slides/
 metadata/
 .agents/
 .claude/

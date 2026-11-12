@@ -8,8 +8,8 @@ with flag counts, the Track 1 flag transition matrix, device classes,
 hotspot-tagged BSSIDs, and selected facilities.
 
 Usage:
-    python scripts/replay_versions.py --ledger data/spatial_confidence_ledger/ALB/ALB_ledger.csv
-    python scripts/replay_versions.py --ledger ... --country ALB --cases ID1,ID2
+    python scripts/replay_versions.py --ledger data/spatial_confidence_ledger/XXX/XXX_ledger.csv
+    python scripts/replay_versions.py --ledger ... --country XXX --cases ID1,ID2
 
 Outputs go to `--out` (default `/tmp/gigameter-replay`), never into the
 repository, because they contain facility and device identifiers.

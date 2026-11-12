@@ -165,13 +165,13 @@ def test_entity_pins_load_from_delta_only_when_asked():
     table = pd.DataFrame({"giga_id_school": ["SCH_X"], "latitude": [1.0], "longitude": [2.0]})
     store = FakeDelta(table)
     validator = FacilityValidator(
-        telemetry_df=example_a(), country_iso3="ALB", delta_store=store, load_entity_pins=True
+        telemetry_df=example_a(), country_iso3="XXX", delta_store=store, load_entity_pins=True
     )
-    assert store.calls == ["ALB"]
+    assert store.calls == ["XXX"]
     assert validator.entity_pins_source == PINS_FROM_DELTA
 
-    default = FacilityValidator(telemetry_df=example_a(), country_iso3="ALB", delta_store=store)
-    assert store.calls == ["ALB"]
+    default = FacilityValidator(telemetry_df=example_a(), country_iso3="XXX", delta_store=store)
+    assert store.calls == ["XXX"]
     assert default.entity_pins_source == PINS_FROM_TELEMETRY
 
     with pytest.raises(ValueError, match="country_iso3"):
