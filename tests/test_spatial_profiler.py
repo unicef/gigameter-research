@@ -169,8 +169,8 @@ def test_bssid_profiles_report_fix_events_and_carried_rows():
 
 
 def test_locally_administered_bit():
-    assert is_locally_administered("6a:00:00:00:00:0c")
-    assert not is_locally_administered("e8:00:00:00:00:0c")
+    assert is_locally_administered("02:00:00:00:00:06")
+    assert not is_locally_administered("00:00:5e:00:53:04")
     assert not is_locally_administered(None)
     assert not is_locally_administered("zz")
 
@@ -181,7 +181,7 @@ def test_locally_administered_bit():
         ("Shkolla Gamma", "Shkolla 9-vjeçare Gamma", True),
         ("Shkolla Delta Epsilon 2.4G", "Shkolla 9-vjeçare Delta Epsilon", True),
         ("Delta-5G", "Shkolla 9-vjeçare Delta Epsilon", False),
-        ("Home-4FF2-5G", "Shkolla e Bashkuar Alfa Beta", False),
+        ("Home-XXXX-5G", "Shkolla e Bashkuar Alfa Beta", False),
         ("Shkolla", "Shkolla 9-vjeçare", False),
         ("School 12 Main", "School 12 Main", True),
         (None, "Shkolla Gamma", False),
@@ -192,4 +192,4 @@ def test_ssid_name_match(ssid, name, expected):
 
 
 def test_distinctive_tokens_strip_diacritics_and_grade_labels():
-    assert distinctive_tokens("Shkolla 9-vjeçare Çajupi") == {"cajupi"}
+    assert distinctive_tokens("Shkolla 9-vjeçare Example School A") == {"example", "a"}

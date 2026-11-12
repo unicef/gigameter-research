@@ -170,11 +170,11 @@ def test_delta_load_when_schools_df_omitted() -> None:
 
     loaded = TelemetryLoader().load(
         telemetry_df=_telemetry(),
-        country_iso3="ALB",
+        country_iso3="XXX",
         delta_store=delta,
     )
 
-    assert delta.calls == ["ALB"]
+    assert delta.calls == ["XXX"]
     assert loaded["govt_latitude"].iloc[0] == 41.4
     assert loaded["govt_longitude"].iloc[0] == 19.4
 
@@ -192,7 +192,7 @@ def test_existing_govt_pins_skip_delta_on_query_path() -> None:
     loaded = TelemetryLoader().load(
         query_name="fetch_spatial_confidence_ledger",
         query_params={
-            "country_iso3": "ALB",
+            "country_iso3": "XXX",
             "start_date": "2026-01-01",
             "end_date": "2026-08-05",
             "min_app_version": "2.0.2",
@@ -202,7 +202,7 @@ def test_existing_govt_pins_skip_delta_on_query_path() -> None:
     )
 
     assert db.tested is True
-    assert "ALB" in db.queries[0]
+    assert "XXX" in db.queries[0]
     assert delta.calls == []
     assert loaded["govt_latitude"].iloc[0] == pytest.approx(41.7)
 
@@ -216,7 +216,7 @@ def test_latitude_alias_on_telemetry_skips_delta() -> None:
 
     loaded = TelemetryLoader().load(
         telemetry_df=_telemetry(latitude=41.9, longitude=19.9),
-        country_iso3="ALB",
+        country_iso3="XXX",
         delta_store=delta,
     )
 
@@ -237,7 +237,7 @@ def test_query_without_pins_uses_country_from_params() -> None:
     loaded = TelemetryLoader().load(
         query_name="fetch_spatial_confidence_ledger",
         query_params={
-            "country_iso3": "ALB",
+            "country_iso3": "XXX",
             "start_date": "2026-01-01",
             "end_date": "2026-08-05",
             "min_app_version": "2.0.2",
@@ -246,7 +246,7 @@ def test_query_without_pins_uses_country_from_params() -> None:
         delta_store=delta,
     )
 
-    assert delta.calls == ["ALB"]
+    assert delta.calls == ["XXX"]
     assert loaded["govt_latitude"].iloc[0] == 41.6
 
 
@@ -266,7 +266,7 @@ def test_test_connection_failure_raises_before_query() -> None:
     with pytest.raises(ConnectionError, match="connection test failed"):
         TelemetryLoader().load(
             query_name="fetch_spatial_confidence_ledger",
-            query_params={"country_iso3": "ALB"},
+            query_params={"country_iso3": "XXX"},
             db=db,
         )
 
@@ -285,7 +285,7 @@ def test_schools_frame_requires_latitude_and_longitude() -> None:
 
 
 def test_reads_csv_ledger(tmp_path: Path) -> None:
-    path = tmp_path / "ALB_spatial_confidence_ledger.csv"
+    path = tmp_path / "XXX_spatial_confidence_ledger.csv"
     _telemetry(govt_latitude=41.8, govt_longitude=19.8).to_csv(path, index=False)
 
     loaded = TelemetryLoader().load(file_path=path)

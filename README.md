@@ -64,7 +64,7 @@ Analyses on exported ledger files need no credentials. Credentials are only need
 ```python
 from src.spatial_intelligence.facility_validator import FacilityValidator
 
-validator = FacilityValidator(file_path="data/spatial_confidence_ledger/ALB/ALB_ledger.csv")
+validator = FacilityValidator(file_path="data/spatial_confidence_ledger/XXX/XXX_ledger.csv")
 audit = validator.run_national_facility_audit()   # one row per facility
 audit["location_verification_flag"].value_counts()
 ```
