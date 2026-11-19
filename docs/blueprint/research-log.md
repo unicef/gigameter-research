@@ -65,6 +65,10 @@ All fixed in v0.3:
 *   `resolution_strategy_used` reported the requested strategy even after a fallback. It is replaced by `anchor_resolved_by` and `strategy_fallback_reason`.
 *   The operational-hours filter was applied to the score but not to the centroid. The anchor window now applies operational hours and workdays to the centroid and the score. Mobility uses all hours on purpose (Blueprint Section 4.1).
 
+### Operational-hours wiring
+
+`operational_hours` was stored on `SpatialConfig` and included in `config_hash`, while local-time enrichment and the measurement SQL stamped a fixed hour window before the config was applied. The window is now read from the config. The default value is unchanged. This is not a methodology change, and no version label is chosen for it here. See [ADR 0011](../adr/0011-operational-hours.md).
+
 ### Validation
 
 v0.2 and v0.3 were replayed on the same ledger with `scripts/replay_versions.py`. The v0.2 side is the last v0.2 commit, `66d9596`. The ledger is the one behind the findings above: one country, June to mid-August 2026, 9,189 rows, 245 devices, 165 facilities, 541 BSSIDs, official pins from Delta Sharing.

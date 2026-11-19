@@ -11,6 +11,8 @@ import json
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Tuple
 
+import pandas as pd
+
 STRATEGY_GOVT_PROXIMITY = "govt_proximity_anchor"
 STRATEGY_TELEMETRY_DOMINANCE = "telemetry_dominance"
 STRATEGY_STATIONARY_FIRST = "stationary_first"
@@ -58,9 +60,9 @@ class SpatialConfig:
     Settings shared by the mobility, profiling, and validation modules.
 
     Distances are meters, durations are seconds, and score values are points.
-    `operational_hours` is an inclusive pair of local hours, so `(8, 19)`
-    covers 08:00:00 to 19:59:59. `workdays` uses pandas weekday numbers,
-    Monday = 0.
+    `operational_hours` is an inclusive pair of integer local hours. The end
+    hour covers HH:00–HH:59, so `(8, 19)` covers 08:00:00 to 19:59:59.
+    `workdays` uses pandas weekday numbers, Monday = 0.
 
     Raises:
         ValueError: From `__post_init__` when settings contradict each other.
@@ -68,7 +70,8 @@ class SpatialConfig:
 
     methodology_version: str = "0.3"
 
-    # Evidence and time window
+    # Evidence and time window. Inclusive integer local hours; the end hour
+    # covers HH:00–HH:59.
     operational_hours: Tuple[int, int] = (8, 19)
     workdays: Tuple[int, ...] = (0, 1, 2, 3, 4)
     burst_window_s: float = 300.0
@@ -131,8 +134,16 @@ class SpatialConfig:
     def __post_init__(self) -> None:
         errors = []
         start_hour, end_hour = self.operational_hours
-        if not 0 <= start_hour <= end_hour <= 23:
-            errors.append("operational_hours must satisfy 0 <= start <= end <= 23")
+        if (
+            isinstance(start_hour, bool)
+            or isinstance(end_hour, bool)
+            or not isinstance(start_hour, int)
+            or not isinstance(end_hour, int)
+            or not 0 <= start_hour <= end_hour <= 23
+        ):
+            errors.append(
+                "operational_hours must be integers satisfying 0 <= start <= end <= 23"
+            )
         if not self.workdays or any(day not in range(7) for day in self.workdays):
             errors.append("workdays must be a non-empty subset of 0..6")
         if self.device_min_samples < 2:
@@ -186,3 +197,26 @@ class SpatialConfig:
 
 
 DEFAULT_CONFIG = SpatialConfig()
+
+
+def in_operational_hours(local_hour: pd.Series, config: SpatialConfig = DEFAULT_CONFIG) -> pd.Series:
+    """
+    Return whether each local hour falls inside `config.operational_hours`.
+
+    Both ends are inclusive. A null hour is a broken local-time column.
+
+    Args:
+        local_hour: Integer local hours, one per row.
+        config: Methodology settings.
+
+    Returns:
+        A boolean series aligned to `local_hour`.
+
+    Raises:
+        ValueError: If any hour is missing or null.
+    """
+    hour = pd.to_numeric(local_hour, errors="coerce")
+    if hour.isna().any():
+        raise ValueError("local_hour is missing or null")
+    start_hour, end_hour = config.operational_hours
+    return hour.between(start_hour, end_hour)

@@ -171,7 +171,7 @@ Geofence compliance is reported per device but never feeds its class. It is the 
 ### 5.1 Data Ingestion Rules
 
 1. **No-IP Policy:** Rows with null `detected_latitude` or `detected_longitude` are dropped. `client_info` IP coordinates are never used as facility pins.
-2. **Anchor Window:** Facility clustering uses fix events inside 08:00:00–19:59:59 local time on configured `workdays`. Device mobility (Layer 1) uses all hours.
+2. **Anchor Window:** Facility clustering uses fix events whose first row falls inside `SpatialConfig.operational_hours` on configured `workdays`. The setting is an inclusive pair of integer local hours; the end hour covers HH:00–HH:59. The default is 08:00:00–19:59:59. Device mobility (Layer 1) uses all hours.
 3. **Fix Events:** As defined in Section 2.
 
 ### 5.2 Hotspot & BSSID Mobility Signals

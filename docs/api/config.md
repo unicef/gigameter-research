@@ -37,3 +37,7 @@ Fields are listed in the same groups as on the [Parameters](../blueprint/paramet
 ::: src.spatial_intelligence.config.SpatialConfig
     options:
       show_if_no_docstring: true
+
+::: src.spatial_intelligence.config.in_operational_hours
+    options:
+      show_if_no_docstring: true

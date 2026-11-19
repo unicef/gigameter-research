@@ -12,6 +12,8 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from src.spatial_intelligence.config import DEFAULT_CONFIG
+
 ORIGIN = (10.0, 20.0)
 
 
@@ -53,7 +55,11 @@ def row(
         "local_hour": when.hour,
         "local_day_of_week": when.strftime("%A"),
         "is_weekday": when.weekday() < 5,
-        "is_operational_hours": 8 <= when.hour <= 19,
+        "is_operational_hours": (
+            DEFAULT_CONFIG.operational_hours[0]
+            <= when.hour
+            <= DEFAULT_CONFIG.operational_hours[1]
+        ),
     }
 
 

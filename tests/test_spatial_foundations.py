@@ -1,5 +1,10 @@
 """Tests for SpatialConfig, geo helpers, fix events, and local-time enrichment."""
 
+import logging
+import re
+from datetime import datetime, timedelta
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -14,7 +19,11 @@ from spatial_fixtures import (
     example_c,
     offset,
 )
-from src.spatial_intelligence.config import DEFAULT_CONFIG, SpatialConfig
+from src.spatial_intelligence.config import (
+    DEFAULT_CONFIG,
+    SpatialConfig,
+    in_operational_hours,
+)
 from src.spatial_intelligence.fix_events import build_fix_event_table, mark_fix_events
 from src.spatial_intelligence.geo import (
     NOISE_LABEL,
@@ -46,6 +55,7 @@ def test_config_hash_is_stable_and_changes_with_settings() -> None:
         ({"coherence_full_m": 2500.0}, "coherence_full_m"),
         ({"device_min_samples": 1}, "device_min_samples"),
         ({"operational_hours": (20, 8)}, "operational_hours"),
+        ({"operational_hours": (True, 12)}, "operational_hours"),
         ({"strategies": ("closest_pin",)}, "strategies"),
         ({"confidence_medium_min": 80.0}, "confidence_medium_min"),
     ],
@@ -53,6 +63,18 @@ def test_config_hash_is_stable_and_changes_with_settings() -> None:
 def test_config_rejects_contradictory_settings(changes: dict, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         DEFAULT_CONFIG.with_overrides(**changes)
+
+
+def test_operational_hours_include_the_start_and_end_hours() -> None:
+    start, end = DEFAULT_CONFIG.operational_hours
+    hours = pd.Series([start - 1, start, end, end + 1])
+
+    assert in_operational_hours(hours, DEFAULT_CONFIG).tolist() == [
+        False,
+        True,
+        True,
+        False,
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +188,70 @@ def test_burst_window_is_configurable() -> None:
 def test_empty_frame_returns_empty_event_table() -> None:
     empty = example_a().iloc[0:0]
     assert build_fix_event_table(empty).empty
+    assert mark_fix_events(empty).empty
+
+
+def _one_fix(when: datetime, *, stamp=None) -> dict:
+    row = {
+        "school_id_giga": "S1",
+        "device_id": "D1",
+        "detected_latitude": 10.0,
+        "detected_longitude": 20.0,
+        "detected_location_accuracy": 15.0,
+        "detected_wifi_bssid": "00:00:5e:00:53:10",
+        "created_timestamp": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "local_created_timestamp": when,
+        "local_hour": when.hour,
+    }
+    if stamp is not None:
+        row["is_operational_hours"] = stamp
+    return row
+
+
+def test_recomputed_operational_hours_replace_a_disagreeing_stamp(caplog) -> None:
+    start, end = DEFAULT_CONFIG.operational_hours
+    when = datetime(2026, 7, 6, start, 15)
+    frame = pd.DataFrame([_one_fix(when, stamp=False)])
+
+    with caplog.at_level(logging.WARNING, logger="src.spatial_intelligence.fix_events"):
+        marked = mark_fix_events(frame)
+
+    assert marked["is_operational_hours"].tolist() == [True]
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    assert "1" in message
+    assert str((start, end)) in message
+    assert "S1" not in message
+    assert "D1" not in message
+
+
+def test_burst_crossing_the_end_hour_stays_in_window_from_its_first_row() -> None:
+    _, end = DEFAULT_CONFIG.operational_hours
+    first = datetime(2026, 7, 6, end, 58)
+    second = first + timedelta(seconds=int(DEFAULT_CONFIG.burst_window_s))
+    events = build_fix_event_table(pd.DataFrame([_one_fix(first), _one_fix(second)]))
+
+    assert len(events) == 1
+    assert int(events["local_hour"].iloc[0]) == end
+    assert bool(events["is_operational_hours"].iloc[0]) is True
+
+
+def test_mark_fix_events_raises_when_local_time_is_missing_or_null() -> None:
+    frame = pd.DataFrame([_one_fix(datetime(2026, 7, 6, 12, 0))])
+
+    with pytest.raises(ValueError, match="local_hour"):
+        mark_fix_events(frame.drop(columns=["local_hour"]))
+    null_hour = frame.copy()
+    null_hour.loc[0, "local_hour"] = None
+    with pytest.raises(ValueError, match="local_hour"):
+        mark_fix_events(null_hour)
+
+    with pytest.raises(ValueError, match="local_created_timestamp"):
+        mark_fix_events(frame.drop(columns=["local_created_timestamp"]))
+    null_timestamp = frame.copy()
+    null_timestamp.loc[0, "local_created_timestamp"] = pd.NaT
+    with pytest.raises(ValueError, match="local_created_timestamp"):
+        mark_fix_events(null_timestamp)
 
 
 # ---------------------------------------------------------------------------
@@ -192,5 +278,36 @@ def test_enrichment_keeps_tz_name_and_converts_each_timezone() -> None:
 
     assert loaded["tz_name"].tolist() == ["Europe/Tirane", "Europe/Tirane", "Asia/Manila"]
     assert loaded["local_hour"].tolist() == [8, 20, 7]
-    assert loaded["is_operational_hours"].tolist() == [True, False, False]
+    assert "is_operational_hours" not in loaded.columns
     assert str(loaded["local_date"].iloc[2]) == "2026-07-02"
+
+
+def test_operational_hour_window_is_not_hard_coded_outside_config() -> None:
+    root = Path(__file__).resolve().parents[1]
+    allowed = root / "src" / "spatial_intelligence" / "config.py"
+    needles = (
+        "between(" + "8, 19)",
+        "between(" + "8,19)",
+        "(" + "8, 19)",
+        "(" + "8,19)",
+        "BETWEEN " + "8 AND 19",
+    )
+    inequality = re.compile("8" + r"\s*<=\s*.*<=\s*" + "19")
+    offenders = []
+    paths = (
+        list((root / "src").rglob("*.py"))
+        + list((root / "tests").rglob("*.py"))
+        + list((root / "sql").rglob("*.sql"))
+    )
+    for path in paths:
+        if path.resolve() == allowed.resolve():
+            continue
+        for number, line in enumerate(path.read_text().splitlines(), start=1):
+            if any(needle in line for needle in needles) or inequality.search(line):
+                offenders.append(f"{path.relative_to(root)}:{number}")
+    assert offenders == []
+
+
+def test_measurement_sql_does_not_stamp_operational_hours() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "sql" / "fetch_measurements.sql").read_text()
+    assert "is_operational_hours" not in sql

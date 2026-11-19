@@ -44,6 +44,8 @@ repo_url: https://github.com/unicef/gigameter-research
 site_url: https://unicef.github.io/gigameter-research/
 edit_uri: edit/main/docs/
 
+exclude_docs: .DS_Store
+
 extra:
   version:
     provider: mike
@@ -117,6 +119,8 @@ nav:
         - Spatial & Geofencing Blueprint: blueprint/technical_blueprint.md
         - Methodology Parameters: blueprint/parameters.md
         - Research Log: blueprint/research-log.md
+      - Decisions:
+        - Operational hours: adr/0011-operational-hours.md
       - Python API Reference:
         - Overview: api/index.md
         - Data Loading: api/loading.md

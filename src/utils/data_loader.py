@@ -5,12 +5,17 @@ Purpose: Single ingestion path for GigaMeter spatial telemetry.
          and enriches UTC timestamps to local device time.
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
 
+import numpy as np
 import pandas as pd
 
+from src.spatial_intelligence.geo import haversine_m
 from src.utils.timezone_enricher import enrich_telemetry_with_local_time
+
+logger = logging.getLogger(__name__)
 
 TELEMETRY_COLUMN_ALIASES: Dict[str, str] = {
     "giga_id_school": "school_id_giga",
@@ -35,14 +40,11 @@ LOCAL_TIME_COLUMNS = (
     "local_hour",
     "local_day_of_week",
     "is_weekday",
-    "is_operational_hours",
 )
 
-_LOCAL_TIME_SKIP_COLUMNS = (
-    "local_created_timestamp",
-    "local_hour",
-    "is_operational_hours",
-)
+_CLOCK_COLUMNS = ("local_created_timestamp", "local_hour")
+_GOVT_COLUMNS = ("govt_latitude", "govt_longitude")
+PIN_MATCH_M = 1.0
 
 
 def canonicalize_telemetry_columns(telemetry_df: pd.DataFrame) -> pd.DataFrame:
@@ -132,6 +134,78 @@ def _require_columns(frame: pd.DataFrame, columns: tuple) -> None:
         )
 
 
+def _clock_is_complete(frame: pd.DataFrame) -> bool:
+    """Return whether both local-time columns are present and non-null."""
+    present = [column in frame.columns for column in _CLOCK_COLUMNS]
+    if any(present) and not all(present):
+        raise ValueError(
+            "Telemetry frame has partial local-time enrichment. "
+            "local_created_timestamp and local_hour must both be present."
+        )
+    if not all(present):
+        return False
+    timestamps = pd.to_datetime(frame["local_created_timestamp"], errors="coerce")
+    if timestamps.isna().any():
+        raise ValueError("local_created_timestamp contains nulls")
+    if frame["local_hour"].isna().any():
+        raise ValueError("local_hour contains nulls")
+    return True
+
+
+def _has_nonnull_govt_pins(frame: pd.DataFrame) -> bool:
+    """True when at least one row has both official coordinates."""
+    if not set(_GOVT_COLUMNS).issubset(frame.columns):
+        return False
+    paired = frame["govt_latitude"].notna() & frame["govt_longitude"].notna()
+    return bool(paired.any())
+
+
+def _drop_govt_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    present = [column for column in _GOVT_COLUMNS if column in frame.columns]
+    return frame.drop(columns=present)
+
+
+def _differing_facility_count(frame: pd.DataFrame, schools_df: pd.DataFrame) -> int:
+    """Count frame facilities whose pin contradicts `schools_df`."""
+    pins = prepare_schools_frame(schools_df).rename(
+        columns={
+            "govt_latitude": "schools_latitude",
+            "govt_longitude": "schools_longitude",
+        }
+    )
+    facilities = frame.drop_duplicates(subset=["school_id_giga"]).copy()
+    for column in _GOVT_COLUMNS:
+        if column not in facilities.columns:
+            facilities[column] = np.nan
+    compared = facilities[["school_id_giga", *_GOVT_COLUMNS]].merge(
+        pins, on="school_id_giga", how="left"
+    )
+    schools_has = compared["schools_latitude"].notna() & compared["schools_longitude"].notna()
+    frame_has = compared["govt_latitude"].notna() & compared["govt_longitude"].notna()
+    differ = pd.Series(False, index=compared.index)
+    differ.loc[schools_has & ~frame_has] = True
+    both = schools_has & frame_has
+    if both.any():
+        distance = haversine_m(
+            compared.loc[both, "govt_latitude"],
+            compared.loc[both, "govt_longitude"],
+            compared.loc[both, "schools_latitude"],
+            compared.loc[both, "schools_longitude"],
+        )
+        differ.loc[both] = np.asarray(distance) > PIN_MATCH_M
+    return int(differ.sum())
+
+
+def _reject_pin_mismatch(frame: pd.DataFrame, schools_df: pd.DataFrame) -> None:
+    count = _differing_facility_count(frame, schools_df)
+    if count:
+        raise ValueError(
+            f"{count} facilities have govt pins that differ from schools_df. "
+            "Pass the raw, non-enriched frame, or drop the govt_* and local_* "
+            "columns, to re-pin and re-enrich."
+        )
+
+
 def _resolve_country_iso3(
     country_iso3: Optional[str], query_params: Optional[Mapping[str, Any]]
 ) -> Optional[str]:
@@ -183,11 +257,13 @@ class TelemetryLoader:
     with `query_params`. A `.csv` or `.parquet` file is read from `file_path`.
     `query_name` is a template stem under `sql/` formatted with `query_params`.
 
-    When `govt_latitude` is already on the frame, school coordinates and both
-    clients are skipped. Otherwise pins are merged from `schools_df`, or from
-    `delta_store.load_table(country_iso3)` when `schools_df` is omitted.
-    Local-time enrichment is skipped when `local_created_timestamp`,
-    `local_hour`, and `is_operational_hours` are already present.
+    A frame with both `local_created_timestamp` and `local_hour`, and no
+    nulls in either, keeps that local time and its govt pins. A country code
+    on that frame is logged and does not call Delta. `schools_df` must agree
+    with those pins within 1 meter. A frame that still needs local time takes
+    pins from `schools_df`, then from non-null govt columns, then from Delta
+    via a country code. An incoming `is_operational_hours` column is left
+    untouched.
     """
 
     def __init__(self, sql_dir: Optional[Union[str, Path]] = None) -> None:
@@ -225,8 +301,9 @@ class TelemetryLoader:
             query_params: Values for the SQL template placeholders.
             country_iso3: ISO3 code passed to `delta_store.load_table`.
                 Defaults to `query_params["country_iso3"]` when omitted.
-            schools_df: Official school metadata. Used only when the telemetry
-                frame does not already contain `govt_latitude`.
+            schools_df: Official school metadata. On a frame that still needs
+                local time, these pins replace any govt columns. On an
+                already-enriched frame they must match the existing pins.
             timestamp_col: UTC timestamp column read by the timezone enricher.
             db: Database client with `test_connection` and
                 `read_sql_to_dataframe`. Constructed with `DBConnection()`
@@ -240,8 +317,7 @@ class TelemetryLoader:
             Wi-Fi columns under their canonical names, `govt_latitude` and
             `govt_longitude` when a schools row matches, and local-time
             columns `tz_name`, `local_created_timestamp`, `local_date`,
-            `local_hour`, `local_day_of_week`, `is_weekday`, and
-            `is_operational_hours`.
+            `local_hour`, `local_day_of_week`, and `is_weekday`.
 
         Raises:
             ValueError: If the source count is not exactly one, the file
@@ -257,17 +333,20 @@ class TelemetryLoader:
             db=db,
         )
         frame = canonicalize_telemetry_columns(frame)
-        if "govt_latitude" not in frame.columns:
+        country = _resolve_country_iso3(country_iso3, query_params)
+        if _clock_is_complete(frame):
+            if country:
+                logger.info("Country code ignored; local time is already on the frame.")
+            if schools_df is not None:
+                _reject_pin_mismatch(frame, schools_df)
+        else:
             frame = self._merge_school_pins(
                 frame,
                 schools_df=schools_df,
-                country_iso3=_resolve_country_iso3(country_iso3, query_params),
+                country_iso3=country,
                 delta_store=delta_store,
             )
-        if not set(_LOCAL_TIME_SKIP_COLUMNS).issubset(frame.columns):
-            frame = enrich_telemetry_with_local_time(
-                frame, timestamp_col=timestamp_col
-            )
+            frame = enrich_telemetry_with_local_time(frame, timestamp_col=timestamp_col)
         _require_columns(frame, REQUIRED_TELEMETRY_COLUMNS + LOCAL_TIME_COLUMNS)
         return frame
 
@@ -337,15 +416,19 @@ class TelemetryLoader:
             raise ValueError(
                 "Telemetry frame is missing required columns: school_id_giga"
             )
-        if schools_df is None:
-            if not country_iso3:
-                raise ValueError(
-                    "country_iso3 is required to load school coordinates from "
-                    "Delta Sharing when govt_latitude is absent and schools_df "
-                    "is not provided."
-                )
-            store = _delta_store_or_default(delta_store)
-            schools_df = store.load_table(country_iso3)
-
-        pins = prepare_schools_frame(schools_df)
-        return telemetry_df.merge(pins, on="school_id_giga", how="left")
+        if schools_df is not None:
+            pins = prepare_schools_frame(schools_df)
+            return _drop_govt_columns(telemetry_df).merge(pins, on="school_id_giga", how="left")
+        if _has_nonnull_govt_pins(telemetry_df):
+            if country_iso3:
+                logger.info("Country code ignored; govt pins are already on the frame.")
+            return telemetry_df
+        if not country_iso3:
+            raise ValueError(
+                "country_iso3 is required to load school coordinates from "
+                "Delta Sharing when govt pins are absent and schools_df "
+                "is not provided."
+            )
+        store = _delta_store_or_default(delta_store)
+        pins = prepare_schools_frame(store.load_table(country_iso3))
+        return _drop_govt_columns(telemetry_df).merge(pins, on="school_id_giga", how="left")
