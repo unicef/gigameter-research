@@ -5,7 +5,7 @@ Every analysis class loads telemetry through `TelemetryLoader`, so all of them s
 1. reads one source: a DataFrame, a `.csv` or `.parquet` file, or a SQL template;
 2. renames known synonyms to the canonical names, for example `giga_id_school` to `school_id_giga`;
 3. merges official pins as `govt_latitude` and `govt_longitude` when the telemetry does not already have them;
-4. converts UTC timestamps to local time at the facility and adds the operational-hours flags.
+4. converts UTC timestamps to local time at the facility. The operational-hours window is applied later from `SpatialConfig`.
 
 It never fills `detected_latitude` or `detected_longitude` from IP coordinates in `client_info`. Rows without a Wi-Fi location keep null coordinates and are dropped later by the spatial classes.
 
@@ -28,7 +28,8 @@ Added by the loader:
 | `tz_name` | IANA time zone of the facility |
 | `local_created_timestamp`, `local_date`, `local_hour`, `local_day_of_week` | Local time fields |
 | `is_weekday` | Monday to Friday |
-| `is_operational_hours` | 08:00:00 to 19:59:59 local time |
+
+`is_operational_hours` is not a loader column. `in_operational_hours` applies `SpatialConfig.operational_hours` to `local_hour`. An older file may still carry a precomputed flag; the methodology recomputes it.
 
 Optional Wi-Fi columns are renamed when present: `detected_bssid` to `detected_wifi_bssid`, `detected_ssid` to `detected_wifi_ssid`, and `detected_wifi_signal` to `wifi_signal_dbm`.
 

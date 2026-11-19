@@ -86,12 +86,6 @@ SELECT
     EXTRACT(HOUR FROM local_created_timestamp) AS local_hour_of_measurement,
     FORMAT_DATETIME(local_created_timestamp, 'EEEE') AS local_day_of_week,
 
-    -- Section 2: Active Operational Hours Window (08:00 - 19:59 local device time)
-    CASE 
-        WHEN EXTRACT(HOUR FROM local_created_timestamp) BETWEEN 8 AND 19 THEN TRUE 
-        ELSE FALSE 
-    END AS is_operational_hours,
-
     -- Throughput Unit Conversions (kbps -> Mbps)
     ROUND(CAST(download AS DOUBLE) / 1000.0, 2) AS download_speed_mbps,
     ROUND(CAST(upload AS DOUBLE) / 1000.0, 2) AS upload_speed_mbps,

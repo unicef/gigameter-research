@@ -68,7 +68,7 @@ def render_tab_governance(validator: FacilityValidator) -> None:
         st.metric(
             "Operational hours",
             f"{gov['operational_hours_pct']}%",
-            help="Rows inside 08:00-19:59 local device time.",
+            help="Share of rows whose local hour is inside the configured operational-hours window.",
             border=True,
         )
         st.metric(

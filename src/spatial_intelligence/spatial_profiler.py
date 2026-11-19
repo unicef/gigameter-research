@@ -26,6 +26,7 @@ from .config import (
     STRATEGY_STATIONARY_FIRST,
     STRATEGY_TELEMETRY_DOMINANCE,
     SpatialConfig,
+    in_operational_hours,
 )
 from .fix_events import build_fix_event_table, mark_fix_events
 from .geo import dbscan_labels, haversine_m, max_pairwise_distance_m, weighted_centroid
@@ -184,6 +185,15 @@ class SpatialProfiler:
         rows[tag_columns] = df.loc[rows.index, tag_columns]
         self.fix_event_rows = rows
         self.fix_events = build_fix_event_table(rows, self.config, marked=True)
+        self._apply_operational_hours()
+
+    def _apply_operational_hours(self) -> None:
+        """Replace `is_operational_hours` from `local_hour` and the config window."""
+        if "local_hour" not in self.df.columns:
+            raise ValueError("local_hour is missing or null")
+        self.df["is_operational_hours"] = in_operational_hours(
+            self.df["local_hour"], self.config
+        ).to_numpy()
 
     def _find_mobile_bssids(self, rows: pd.DataFrame) -> set:
         cfg = self.config
@@ -219,8 +229,8 @@ class SpatialProfiler:
 
         Counts are taken from the full frame held by this profiler, including
         rows without coordinates. Percentages are rounded to one decimal.
-        A zero row count yields 0.0, except `operational_hours_pct`, which is
-        100.0 when the flag is absent or there are no rows.
+        A zero row count yields 0.0. `operational_hours_pct` is the share of
+        rows whose `local_hour` is inside `operational_hours`.
 
         Returns:
             Total records, ambient-scan and hotspot shares (split into SSID
@@ -228,6 +238,7 @@ class SpatialProfiler:
             meters, the operational-hours share, fix-event and carried-row
             counts, facility and device counts, and the local date range.
         """
+        self._apply_operational_hours()
         total_records = len(self.df)
 
         def pct(count: float) -> float:
@@ -244,9 +255,7 @@ class SpatialProfiler:
             else 0.0
         )
         operational_hours_pct = (
-            pct(self.df["is_operational_hours"].sum())
-            if "is_operational_hours" in self.df.columns and total_records > 0
-            else 100.0
+            pct(self.df["is_operational_hours"].sum()) if total_records > 0 else 0.0
         )
         hotspot_scans = int(self.df["is_mobile_hotspot"].sum()) if total_records > 0 else 0
         hotspot_ssid_scans = int(self.df["is_hotspot_ssid"].sum()) if total_records > 0 else 0
@@ -294,6 +303,7 @@ class SpatialProfiler:
         """
         if self._bssid_profiles is not None:
             return self._bssid_profiles
+        self._apply_operational_hours()
         bssid_col = "detected_wifi_bssid"
         if bssid_col not in self.df.columns:
             return pd.DataFrame()
@@ -364,9 +374,16 @@ class SpatialProfiler:
         events = self.fix_events
         if events.empty:
             return events.copy()
-        mask = events["is_workday"].astype(bool)
-        if "is_operational_hours" in events.columns:
-            mask &= events["is_operational_hours"].eq(True)
+        missing = [
+            column
+            for column in ("is_workday", "is_operational_hours")
+            if column not in events.columns
+        ]
+        if missing:
+            raise ValueError(
+                "Anchor window is missing required columns: " + ", ".join(missing)
+            )
+        mask = events["is_workday"].astype(bool) & events["is_operational_hours"].eq(True)
         return events[mask].copy()
 
     def _cluster_facility(

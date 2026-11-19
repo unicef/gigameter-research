@@ -43,6 +43,72 @@ def _summary(df, **kwargs):
     return profiler, summary.iloc[0]
 
 
+def _window_frame(hours: list[int]) -> pd.DataFrame:
+    rows = []
+    for hour in hours:
+        when = datetime(2026, 7, 6, hour, 10)
+        rows.append(
+            row(
+                school="S1",
+                device="D1",
+                when=when,
+                point=(10.0, 20.0),
+                accuracy=15.0,
+                bssid="00:00:5e:00:53:10",
+                ssid="fixture",
+                govt=(10.0, 20.0),
+                school_name="Fixture",
+            )
+        )
+    return frame(rows)
+
+
+def test_profiler_recomputes_a_missing_operational_hours_flag_from_local_hour():
+    start, end = DEFAULT_CONFIG.operational_hours
+    profiler = SpatialProfiler(telemetry_df=_window_frame([start, end + 1]))
+    profiler.df = profiler.df.drop(columns=["is_operational_hours"])
+
+    governance = profiler.summarize_governance()
+    profiles = profiler.build_bssid_profiles()
+
+    assert governance["operational_hours_pct"] == 50.0
+    assert int(profiles["operational_hours_obs"].iloc[0]) == 1
+    assert int(profiles["out_of_hours_obs"].iloc[0]) == 1
+
+
+def test_profiler_replaces_a_wrong_operational_hours_stamp_without_changing_local_hour():
+    start, _end = DEFAULT_CONFIG.operational_hours
+    telemetry = _window_frame([start, start])
+    telemetry["local_hour"] = start
+    telemetry["is_operational_hours"] = False
+    profiler = SpatialProfiler(telemetry_df=telemetry)
+
+    assert profiler.df["local_hour"].tolist() == [start, start]
+    assert profiler.summarize_governance()["operational_hours_pct"] == 100.0
+    assert int(profiler.build_bssid_profiles()["operational_hours_obs"].iloc[0]) == 2
+
+
+def test_narrower_operational_hours_drop_anchor_events_and_change_the_hash():
+    start, end = DEFAULT_CONFIG.operational_hours
+    telemetry = _window_frame([start, end])
+    wide = SpatialProfiler(telemetry_df=telemetry).build_facility_spatial_summary()
+    narrow_config = DEFAULT_CONFIG.with_overrides(operational_hours=(start, end - 1))
+    narrow = SpatialProfiler(telemetry_df=telemetry, config=narrow_config).build_facility_spatial_summary()
+
+    assert int(wide["anchor_window_events"].iloc[0]) == 2
+    assert int(narrow["anchor_window_events"].iloc[0]) == 1
+    assert narrow_config.config_hash != DEFAULT_CONFIG.config_hash
+
+
+def test_anchor_window_requires_workday_and_operational_hours_flags():
+    profiler = SpatialProfiler(telemetry_df=_window_frame([DEFAULT_CONFIG.operational_hours[0]]))
+    original = profiler.fix_events.copy()
+    for column in ("is_workday", "is_operational_hours"):
+        profiler.fix_events = original.drop(columns=[column])
+        with pytest.raises(ValueError, match=column):
+            profiler.build_facility_spatial_summary()
+
+
 def test_example_a_anchor_is_the_router_cluster_far_from_the_pin():
     profiler, s = _summary(example_a())
 

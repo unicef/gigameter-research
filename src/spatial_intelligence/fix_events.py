@@ -20,12 +20,15 @@ detected_location_accuracy)` triple. Per device and in time order:
   new evidence.
 """
 
+import logging
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 
-from .config import DEFAULT_CONFIG, SpatialConfig
+from .config import DEFAULT_CONFIG, SpatialConfig, in_operational_hours
+
+logger = logging.getLogger(__name__)
 
 FIX_COLUMNS = (
     "detected_latitude",
@@ -69,12 +72,18 @@ def mark_fix_events(
 
     Args:
         telemetry_df: Canonical telemetry from `TelemetryLoader`.
-        config: Methodology settings; uses `burst_window_s` and `workdays`.
+        config: Methodology settings; uses `burst_window_s`, `workdays`,
+            and `operational_hours`.
 
     Returns:
         A copy with `created_timestamp_utc`, `fix_run_id`,
         `fix_origin_bssid`, `fix_carried`, `fix_event_id` (unique across
-        devices), and `is_workday`.
+        devices), `is_workday`, and `is_operational_hours`. An incoming
+        operational-hours stamp is replaced from `local_hour`.
+
+    Raises:
+        ValueError: If a non-empty frame is missing `local_hour` or
+            `local_created_timestamp`, or either column contains nulls.
     """
     frame = telemetry_df[
         telemetry_df["detected_latitude"].notna()
@@ -88,6 +97,25 @@ def mark_fix_events(
         frame["is_workday"] = pd.Series(dtype=bool)
         frame["created_timestamp_utc"] = pd.Series(dtype="datetime64[ns, UTC]")
         return frame
+
+    if "local_hour" not in frame.columns:
+        raise ValueError("local_hour is missing or null")
+    recomputed_hours = in_operational_hours(frame["local_hour"], config)
+    if "is_operational_hours" in frame.columns:
+        incoming = frame["is_operational_hours"].astype("boolean")
+        mismatch = incoming.isna() | (incoming.to_numpy() != recomputed_hours.to_numpy())
+        mismatches = int(mismatch.sum())
+        if mismatches:
+            logger.warning(
+                "%s rows had is_operational_hours differing from operational_hours %s",
+                mismatches,
+                tuple(config.operational_hours),
+            )
+    frame["is_operational_hours"] = recomputed_hours.to_numpy()
+
+    timestamps = pd.to_datetime(frame["local_created_timestamp"], errors="coerce") if "local_created_timestamp" in frame.columns else None
+    if timestamps is None or timestamps.isna().any():
+        raise ValueError("local_created_timestamp is missing or null")
 
     frame["_utc"] = pd.to_datetime(frame["created_timestamp"], format="ISO8601", utc=True)
     frame = frame.sort_values(["device_id", "_utc"], kind="mergesort")
@@ -117,11 +145,8 @@ def mark_fix_events(
     frame["fix_carried"] = carried
     frame["fix_event_id"] = np.cumsum(new_event).astype("int64")
 
-    if "local_created_timestamp" in frame.columns:
-        weekday = pd.to_datetime(frame["local_created_timestamp"]).dt.dayofweek
-        frame["is_workday"] = weekday.isin(config.workdays)
-    else:
-        frame["is_workday"] = True
+    weekday = pd.to_datetime(frame["local_created_timestamp"]).dt.dayofweek
+    frame["is_workday"] = weekday.isin(config.workdays)
 
     return frame.drop(columns=["created_timestamp_utc"], errors="ignore").rename(
         columns={"_utc": "created_timestamp_utc"}

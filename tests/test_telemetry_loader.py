@@ -1,5 +1,6 @@
 """Contract tests for TelemetryLoader. No live database or Delta share."""
 
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -136,11 +137,13 @@ def test_schools_df_merge_does_not_call_delta() -> None:
             "school_name": ["One", "One"],
         }
     )
-    telemetry = pd.DataFrame(
-        [
-            _telemetry_row(school_id_giga="S1"),
-            _telemetry_row(school_id_giga="S2", device_id="D2"),
-        ]
+    telemetry = _without_local_time(
+        pd.DataFrame(
+            [
+                _telemetry_row(school_id_giga="S1"),
+                _telemetry_row(school_id_giga="S2", device_id="D2"),
+            ]
+        )
     )
 
     loaded = TelemetryLoader().load(
@@ -169,7 +172,7 @@ def test_delta_load_when_schools_df_omitted() -> None:
     )
 
     loaded = TelemetryLoader().load(
-        telemetry_df=_telemetry(),
+        telemetry_df=_without_local_time(),
         country_iso3="XXX",
         delta_store=delta,
     )
@@ -226,7 +229,7 @@ def test_latitude_alias_on_telemetry_skips_delta() -> None:
 
 
 def test_query_without_pins_uses_country_from_params() -> None:
-    raw = _telemetry().drop(columns=["govt_latitude"], errors="ignore")
+    raw = _without_local_time().drop(columns=["govt_latitude"], errors="ignore")
     delta = FakeDelta(
         pd.DataFrame(
             {"school_id_giga": ["S1"], "latitude": [41.6], "longitude": [19.6]}
@@ -314,6 +317,7 @@ def test_summarize_governance_counts_ambient_and_hotspot_rows() -> None:
                 detected_wifi_ssid="iPhone",
                 detected_location_accuracy=30.0,
                 is_operational_hours=False,
+                local_hour=22,
                 govt_latitude=41.33,
                 govt_longitude=19.82,
             ),
@@ -358,6 +362,129 @@ def test_facility_validator_reuses_spatial_summary() -> None:
     assert "bssid_spatial_splits" in audit_summary
     assert "hotspot_tethered_facilities" in audit_summary
     assert "mean_hardware_health_score" in audit_summary
+
+
+def _without_local_time(frame: pd.DataFrame | None = None, **overrides) -> pd.DataFrame:
+    raw = frame if frame is not None else _telemetry(**overrides)
+    drop = [column for column in (*LOCAL_TIME_COLUMNS, "is_operational_hours") if column in raw.columns]
+    return raw.drop(columns=drop)
+
+
+def test_enriched_frame_is_reused_with_or_without_a_country_code(caplog) -> None:
+    delta = FakeDelta(pd.DataFrame({"school_id_giga": ["S1"], "latitude": [0.0], "longitude": [0.0]}))
+    telemetry = _telemetry(govt_latitude=41.7, govt_longitude=19.7)
+    hour = telemetry["local_hour"].iloc[0]
+
+    with caplog.at_level(logging.INFO, logger="src.utils.data_loader"):
+        plain = TelemetryLoader().load(telemetry_df=telemetry, delta_store=delta)
+        with_country = TelemetryLoader().load(
+            telemetry_df=telemetry,
+            country_iso3="XXX",
+            delta_store=delta,
+        )
+
+    assert delta.calls == []
+    assert plain["local_hour"].iloc[0] == hour
+    assert with_country["govt_latitude"].iloc[0] == pytest.approx(41.7)
+    assert len(caplog.records) == 1
+    assert "XXX" not in caplog.records[0].getMessage()
+
+
+def test_partial_or_null_local_time_raises() -> None:
+    partial = _telemetry().drop(columns=["local_hour"])
+    with pytest.raises(ValueError, match="partial"):
+        TelemetryLoader().load(telemetry_df=partial)
+
+    null_hour = _telemetry()
+    null_hour.loc[0, "local_hour"] = None
+    with pytest.raises(ValueError, match="local_hour"):
+        TelemetryLoader().load(telemetry_df=null_hour)
+
+    null_timestamp = _telemetry()
+    null_timestamp.loc[0, "local_created_timestamp"] = pd.NaT
+    with pytest.raises(ValueError, match="local_created_timestamp"):
+        TelemetryLoader().load(telemetry_df=null_timestamp)
+
+
+def test_unenriched_frame_with_country_code_merges_pins_then_local_time() -> None:
+    delta = FakeDelta(
+        pd.DataFrame({"school_id_giga": ["S1"], "latitude": [41.4], "longitude": [19.4]})
+    )
+
+    loaded = TelemetryLoader().load(
+        telemetry_df=_without_local_time(),
+        country_iso3="XXX",
+        delta_store=delta,
+    )
+
+    assert delta.calls == ["XXX"]
+    assert loaded["govt_latitude"].iloc[0] == 41.4
+    assert "local_hour" in loaded.columns
+    assert "is_operational_hours" not in loaded.columns
+
+
+def test_missing_pin_source_raises() -> None:
+    with pytest.raises(ValueError, match="country_iso3"):
+        TelemetryLoader().load(telemetry_df=_without_local_time())
+
+
+def test_enriched_matching_schools_df_keeps_frame_pins() -> None:
+    schools = pd.DataFrame({"school_id_giga": ["S1"], "latitude": [41.7], "longitude": [19.7]})
+
+    loaded = TelemetryLoader().load(
+        telemetry_df=_telemetry(govt_latitude=41.7, govt_longitude=19.7),
+        schools_df=schools,
+    )
+
+    assert loaded["govt_latitude"].iloc[0] == pytest.approx(41.7)
+
+
+def test_enriched_schools_df_mismatch_raises() -> None:
+    schools = pd.DataFrame({"school_id_giga": ["S1"], "latitude": [42.7], "longitude": [19.7]})
+
+    with pytest.raises(ValueError, match="1"):
+        TelemetryLoader().load(
+            telemetry_df=_telemetry(govt_latitude=41.7, govt_longitude=19.7),
+            schools_df=schools,
+        )
+
+
+def test_enriched_null_frame_pin_against_schools_df_raises() -> None:
+    schools = pd.DataFrame({"school_id_giga": ["S1"], "latitude": [41.7], "longitude": [19.7]})
+    telemetry = _telemetry(govt_latitude=float("nan"), govt_longitude=float("nan"))
+
+    with pytest.raises(ValueError, match="1"):
+        TelemetryLoader().load(telemetry_df=telemetry, schools_df=schools)
+
+
+def test_enriched_subset_schools_df_leaves_other_pins() -> None:
+    schools = pd.DataFrame({"school_id_giga": ["S1"], "latitude": [41.7], "longitude": [19.7]})
+    telemetry = pd.DataFrame(
+        [
+            _telemetry_row(school_id_giga="S1", govt_latitude=41.7, govt_longitude=19.7),
+            _telemetry_row(school_id_giga="S2", device_id="D2", govt_latitude=42.0, govt_longitude=19.0),
+        ]
+    )
+
+    loaded = TelemetryLoader().load(telemetry_df=telemetry, schools_df=schools)
+
+    assert loaded.loc[loaded["school_id_giga"] == "S2", "govt_latitude"].iloc[0] == pytest.approx(42.0)
+
+
+def test_all_null_govt_columns_with_country_code_load_delta() -> None:
+    delta = FakeDelta(
+        pd.DataFrame({"school_id_giga": ["S1"], "latitude": [41.5], "longitude": [19.5]})
+    )
+    telemetry = _without_local_time(govt_latitude=float("nan"), govt_longitude=float("nan"))
+
+    loaded = TelemetryLoader().load(
+        telemetry_df=telemetry,
+        country_iso3="XXX",
+        delta_store=delta,
+    )
+
+    assert delta.calls == ["XXX"]
+    assert loaded["govt_latitude"].iloc[0] == 41.5
 
 
 def test_rejects_unsupported_file_suffix(tmp_path: Path) -> None:

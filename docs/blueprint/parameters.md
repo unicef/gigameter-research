@@ -12,13 +12,13 @@ All spatial settings live in one frozen `SpatialConfig` passed to `MobilityAnaly
 
 Earlier values and the reasons they changed are in the [Research Log](research-log.md).
 
-The config checks ordering constraints when it is created, for example `verified_max_m < mismatch_min_m`, `coherence_full_m < split_m`, and `device_min_samples >= 2`.
+The config checks ordering constraints when it is created, for example `verified_max_m < mismatch_min_m`, `coherence_full_m < split_m`, and `device_min_samples >= 2`. `operational_hours` must be two integers in 0–23 with the start hour no later than the end hour. An overnight window is rejected. Both ends are inclusive integer local hours, and the end hour covers HH:00–HH:59.
 
 ## Evidence & Time Window
 
 | Parameter | Value | Since | Status | Used by |
 | --- | --- | --- | --- | --- |
-| `operational_hours` | 08:00–19:59 local | 0.2 | in use | Anchor window, score |
+| `operational_hours` | 08:00–19:59 local | 0.2 | in use | Anchor window (first row of each burst) and row-level operational-hours counts |
 | `workdays` | Mon–Fri | 0.3 | in use, calibrate | Anchor window |
 | `burst_window_s` | 300 | 0.3 | in use, calibrate | Fix events |
 | `accuracy_floor_m` | 1.0 | 0.2 | in use, calibrate | Centroid weights |

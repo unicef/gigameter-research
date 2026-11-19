@@ -2,7 +2,8 @@
 Module: src/utils/timezone_enricher.py
 Purpose: Spatial timezone resolution and local time feature engineering
          for GigaMeter telemetry datasets (Pillars 1-5).
-Rules: GigaMeter Technical Specs v2.2 - Active Operational Hours (08:00 - 19:59 local time).
+Rules: Local time is `created_timestamp` converted at the facility. Which
+       timestamp is the real test time for offline-synced rows is unresolved.
 """
 
 import pandas as pd
@@ -121,7 +122,9 @@ def enrich_telemetry_with_local_time(
     Official school coordinates must already be on the frame as
     `govt_latitude` and `govt_longitude`. This function maps each
     `school_id_giga` to an IANA timezone, converts `timestamp_col` from UTC,
-    and sets the GigaMeter operational window (08:00-19:59 local time).
+    It does not decide the operational-hours window. Local time is
+    `created_timestamp` converted at the facility. Which timestamp is the
+    real test time for offline-synced rows is unresolved.
 
     Args:
         telemetry_df: Canonical telemetry frame.
@@ -130,7 +133,7 @@ def enrich_telemetry_with_local_time(
     Returns:
         A copy of `telemetry_df` with `tz_name`, `created_timestamp_utc`,
         `local_created_timestamp`, `local_date`, `local_hour`,
-        `local_day_of_week`, `is_weekday`, and `is_operational_hours`.
+        `local_day_of_week`, and `is_weekday`.
 
     Raises:
         ValueError: If `school_id_giga` is missing.
@@ -164,8 +167,5 @@ def enrich_telemetry_with_local_time(
     df["local_hour"] = df["local_created_timestamp"].dt.hour
     df["local_day_of_week"] = df["local_created_timestamp"].dt.day_name()
     df["is_weekday"] = df["local_created_timestamp"].dt.dayofweek < 5
-
-    # GigaMeter Operational Window: Strictly 08:00:00 to 19:59:59 local device time (hours 8 through 19)
-    df["is_operational_hours"] = df["local_hour"].between(8, 19)
 
     return df
