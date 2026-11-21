@@ -96,7 +96,7 @@ mkdocs build --strict               # check the documentation before a release
 
 A test fails when a public class or function is missing from the API reference, so new code needs a docstring and an entry in `docs/api/`.
 
-**Versioning.** Methodology releases are tagged `vX.Y.Z` on `main`. The documentation is published per minor version with `mike`, for example `mike deploy --push --update-aliases v0.3 latest`, and earlier versions stay available from the version picker. Methodology changes and their reasons are recorded in the [Research Log](https://unicef.github.io/gigameter-research/latest/blueprint/research-log/).
+**Versioning.** Methodology releases are tagged `vX.Y.Z` on `main`. The documentation is published per minor version with `mike`, for example `mike deploy --push --update-aliases --title "Geofencing v0.3" v0.3 latest`, and earlier versions stay available from the version picker. The docs version is the Spatial Intelligence & Geofencing methodology version; the Outage and Routing tracks are unversioned drafts until their first release. Methodology changes and their reasons are recorded in the [Research Log](https://unicef.github.io/gigameter-research/latest/blueprint/research-log/).
 
 ## License
 

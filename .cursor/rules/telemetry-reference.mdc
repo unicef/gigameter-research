@@ -1,0 +1,5 @@
+---
+description: Use when writing SQL, ping queries, or NDT7 extractions. Read the data dictionary and ADR 0009 before those queries.
+---
+
+For SQL, ping, or NDT7 work, read `docs/reference/data-dictionary.md` (not written yet) and [ADR 0009](../../docs/adr/0009-sql-conventions.md).

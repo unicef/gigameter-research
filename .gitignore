@@ -22,7 +22,9 @@ slides/
 metadata/
 .agents/
 .claude/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 
 # Data files
 *.csv

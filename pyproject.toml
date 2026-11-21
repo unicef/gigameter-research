@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gigameter-research"
-version = "0.3.0.dev0"
+version = "0.3.2"
 description = "GigaMeter telemetry research: spatial geofencing, connectivity, and network diagnostics."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,6 +29,7 @@ docs = [
     "mkdocs-material>=9.6",
     "mkdocstrings[python]>=0.29",
     "mike>=2.2",
+    "pymdown-extensions>=10,<11",
 ]
 dev = ["pytest>=8.4"]
 

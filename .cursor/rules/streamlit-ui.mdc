@@ -1,0 +1,17 @@
+---
+description: Streamlit UI rules. Tabs render only. Calculations stay in src. Loads go through TelemetryLoader and st.cache_data.
+alwaysApply: false
+globs: tabs/*.py,app.py
+---
+
+# Streamlit UI
+
+Tabs only render. KPI and domain arithmetic stays in `src` and is called from the tab. Reuse the validator's existing profiler. Do not build a second one.
+
+A missing or invalid ledger shows an error and calls `st.stop()`. Do not substitute a file or fill coordinates.
+
+`app.py` owns page config, the sidebar, routing, and the ledger path. It loads ledgers from `GIGAMETER_LEDGER_DIR` (default `data/spatial_confidence_ledger`, laid out as `{ISO3}/`). Loads go through `st.cache_data` and `TelemetryLoader`. Copy that pattern from `app.py`. Do not use a hard-coded dated filename.
+
+Do not add a new `DBConnection` or `DeltaSharingDataStore` in the UI unless a live path is explicitly requested. The live-pins toggle is an open issue ([ADR 0014](../../docs/adr/0014-pin-ownership.md)). Do not extend it.
+
+The dashboard is inspection-only.

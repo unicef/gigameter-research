@@ -117,7 +117,7 @@ def enrich_telemetry_with_local_time(
     timestamp_col: str = "created_timestamp",
 ) -> pd.DataFrame:
     """
-    Convert UTC telemetry timestamps into local device time.
+    Convert UTC telemetry timestamps into facility-local time.
 
     Official school coordinates must already be on the frame as
     `govt_latitude` and `govt_longitude`. This function maps each
@@ -151,7 +151,7 @@ def enrich_telemetry_with_local_time(
     )
 
     # Step 4: Convert to local time one timezone at a time
-    print("Converting UTC timestamps to local device time...")
+    print("Converting UTC timestamps to facility-local time...")
     local = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
     for tz_str, index in df.groupby("tz_name").groups.items():
         utc_values = df.loc[index, "created_timestamp_utc"]

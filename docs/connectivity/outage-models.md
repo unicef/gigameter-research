@@ -1,3 +1,6 @@
+!!! warning "Unversioned draft"
+    This track has no released methodology yet. The version picker refers to the Spatial Intelligence & Geofencing methodology only, so this page can change without a version bump.
+
 ## Pillar 4: Outage Classification, Connectivity Modeling & 4-State Telemetry
 
 ### 1\. Why This Pillar Exists
@@ -15,7 +18,7 @@ Real-world deployment environments introduce significant non-network variables:
     *   **Active Speedtests:** Measurement payloads are cached locally and synced automatically once connectivity is re-established (retaining up to **7 days** of history).
     *   **Data Retention Rules:** Local synced telemetry rows are pruned after **3 days**, while un-synced historical data is purged after **30 days**.
 
-**Pillar 4 exists to establish a rigorous, deterministic baseline for entity connectivity during active operational hours (08:00–19:59 local device time) and serve as the foundation for predictive modeling and automated disconnection alarms**.
+**Pillar 4 exists to establish a rigorous, deterministic baseline for entity connectivity during active operational hours (08:00–19:59 facility-local time) and serve as the foundation for predictive modeling and automated disconnection alarms**.
 
 ### 2\. Deterministic Starting Baseline: The 4-State Taxonomy
 
@@ -32,7 +35,7 @@ Time-series ping telemetry (generated every 15 minutes during operational hours)
 
 $$\text{Uptime } (\%) = \frac{\text{Count(State A)}}{\text{Count(State A)} + \text{Count(State B)}} \times 100$$
 
-_(Bounded strictly between 08:00 and 19:59 local device time; excludes State C gaps; isolates State D for sensitivity analysis)_.
+_(Bounded strictly between 08:00 and 19:59 facility-local time; excludes State C gaps; isolates State D for sensitivity analysis)_.
 
 ### 3\. Future Research & Modeling Roadmap
 

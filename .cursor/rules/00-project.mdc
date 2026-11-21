@@ -1,0 +1,16 @@
+---
+description: Project rules for GigaMeter research. Methodology lives in the docs, numbers live in SpatialConfig, and decisions live in the ADRs.
+alwaysApply: true
+---
+
+# GigaMeter research
+
+Methodology lives in `docs/`. Numbers live in `SpatialConfig` and on the Parameters page. Decisions live in `docs/adr/`. Do not put spatial weights, DBSCAN settings, or distance cutoffs in these rules.
+
+Plan first, and make no edits until the plan is approved. Ask clarifying questions. Change a parameter only when an edge case shows it fails.
+
+Never take a location from IP. `detected_latitude` and `detected_longitude` come only from Google Wi-Fi geolocation. Never fill them from `client_info`. Follow [ADR 0007](../../docs/adr/0007-data-handling-public-repo.md).
+
+A method change needs a Research Log entry and a Parameters page update. Never bump `mike` outside a freeze ([ADR 0003](../../docs/adr/0003-versioning-and-freeze.md)).
+
+Time is facility-local, from `created_timestamp_utc` and the school location. Never use the device clock or the IP time zone ([ADR 0011](../../docs/adr/0011-operational-hours.md), [ADR 0012](../../docs/adr/0012-time-basis.md)).
