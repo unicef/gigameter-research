@@ -2,74 +2,138 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0000-template/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0001-version-agent-rules/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0002-mkdocs-source-of-truth/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0003-versioning-and-freeze/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0004-spatialconfig-single-source/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0005-canonical-frame-and-loader/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0006-official-pins-delta-sharing/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0007-data-handling-public-repo/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0008-scope-schools-only/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0009-sql-conventions/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0010-python-and-dependencies/</loc>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0011-operational-hours/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0012-time-basis/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0013-canonical-frame-contract/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0014-pin-ownership/</loc>
+         <lastmod>2026-11-21</lastmod>
+    </url>
+    <url>
+         <loc>https://unicef.github.io/gigameter-research/v0.3/adr/0015-test-timestamp-offline-synced-rows/</loc>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/api/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/api/config/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/api/helpers/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/api/loading/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/api/mobility/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/api/profiler/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/api/validator/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/blueprint/parameters/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/blueprint/research-log/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/blueprint/technical_blueprint/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/connectivity/outage-models/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/diagnostics/routing/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/spatial/examples/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/spatial/pillar-1-mobility/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/spatial/pillar-2-quality/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
     <url>
          <loc>https://unicef.github.io/gigameter-research/v0.3/spatial/pillar-3-validation/</loc>
-         <lastmod>2026-11-19</lastmod>
+         <lastmod>2026-11-21</lastmod>
     </url>
 </urlset>
