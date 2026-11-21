@@ -1,3 +1,6 @@
+!!! warning "Unversioned draft"
+    This track has no released methodology yet. The version picker refers to the Spatial Intelligence & Geofencing methodology only, so this page can change without a version bump.
+
 ## Pillar 5: ISP SLA Accountability, BBR & Bufferbloat Analytics (Early Stage)
 
 ### 1\. Why This Pillar Exists

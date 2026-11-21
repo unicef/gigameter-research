@@ -1,3 +1,6 @@
+!!! warning "Unversioned draft"
+    This track has no released methodology yet. The version picker refers to the Spatial Intelligence & Geofencing methodology only, so this page can change without a version bump.
+
 ## Pillar 4: Outage Classification, Connectivity Modeling & 4-State Telemetry
 
 ### 1\. Why This Pillar Exists

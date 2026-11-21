@@ -14,7 +14,13 @@ Tag releases `git tag vX.Y.Z`. Publish the docs with `mike` as a minor version `
 
 A patch release does not get its own `mike` version. Docs stay on the minor, as in `v0.3` for the `v0.3.x` tags.
 
-Keep `pyproject.toml` `version` equal to the release tag. It was left at `0.3.0.dev0` through `v0.3.0` and `v0.3.1` and set to `0.3.2` with tag `v0.3.2`.
+The docs version is the Spatial Intelligence & Geofencing methodology version, titled `Geofencing vX.Y` in the version picker (`mike deploy --title`). The Outage and Routing pages are marked as unversioned drafts.
+
+Keep `pyproject.toml` `version` equal to the release tag.
+
+## Open questions
+
+When another track reaches its first release, one version picker no longer fits. Planned direction, to be decided in a new ADR then: an unversioned landing page with shared pages, one versioned site per track under its own path (`mike deploy --deploy-prefix`), and track-prefixed tags such as `geofencing-vX.Y.Z`, with `pyproject.toml` as the package version. It was left at `0.3.0.dev0` through `v0.3.0` and `v0.3.1` and set to `0.3.2` with tag `v0.3.2`.
 
 ## Evidence
 

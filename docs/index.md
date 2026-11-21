@@ -32,6 +32,7 @@ hide:
     </h3>
     <p>
       Models for entity geofencing, hardware mobility trajectories, and Wi-Fi spatial clustering.
+      <br><strong>Methodology v0.3 (frozen).</strong> The version picker follows this track.
     </p>
   </a>
 
@@ -45,6 +46,7 @@ hide:
     </h3>
     <p>
       Advanced telemetry models evaluating network uptime.
+      <br><strong>Exploratory draft, not versioned.</strong>
     </p>
   </a>
 
@@ -58,6 +60,7 @@ hide:
     </h3>
     <p>
       NDT7 metric analysis to detect ISP throttling via bufferbloat latency and BBR capacity.
+      <br><strong>Early draft, not versioned.</strong>
     </p>
   </a>
 
