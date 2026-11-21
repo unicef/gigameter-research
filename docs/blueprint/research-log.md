@@ -69,6 +69,10 @@ All fixed in v0.3:
 
 `operational_hours` was stored on `SpatialConfig` and included in `config_hash`, while local-time enrichment and the measurement SQL stamped a fixed hour window before the config was applied. The window is now read from the config. The default value is unchanged. This is not a methodology change, and no version label is chosen for it here. See [ADR 0011](../adr/0011-operational-hours.md).
 
+### Decision records (v0.3.2)
+
+Documentation only. The repository decisions behind v0.3 are now recorded as ADRs 0000–0015 under Decisions, including the time basis ([ADR 0012](../adr/0012-time-basis.md)), the canonical-frame contract ([ADR 0013](../adr/0013-canonical-frame-contract.md)) and pin ownership ([ADR 0014](../adr/0014-pin-ownership.md)). `created_timestamp` is documented as the backend write time in UTC, and "local device time" wording is corrected to facility-local time. No code behaviour, parameter or methodology change; `methodology_version` stays `0.3`.
+
 ### Validation
 
 v0.2 and v0.3 were replayed on the same ledger with `scripts/replay_versions.py`. The v0.2 side is the last v0.2 commit, `66d9596`. The ledger is the one behind the findings above: one country, June to mid-August 2026, 9,189 rows, 245 devices, 165 facilities, 541 BSSIDs, official pins from Delta Sharing.

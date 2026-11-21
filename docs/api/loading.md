@@ -18,7 +18,7 @@ Required after canonicalisation:
 | `school_id_giga` | Facility identifier (`giga_id_school` is accepted) |
 | `device_id` | Device identifier; may be null for older app versions |
 | `detected_latitude`, `detected_longitude` | Google Wi-Fi geolocation result, or null |
-| `created_timestamp` | UTC time of the measurement |
+| `created_timestamp` | Backend write time of the result (`created_at`, UTC); the closest available proxy for when the test ran |
 
 Added by the loader:
 

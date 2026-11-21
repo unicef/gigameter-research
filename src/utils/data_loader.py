@@ -2,7 +2,7 @@
 Module: src/utils/data_loader.py
 Purpose: Single ingestion path for GigaMeter spatial telemetry.
          Canonicalizes column names, merges official school coordinates,
-         and enriches UTC timestamps to local device time.
+         and enriches UTC timestamps to facility-local time.
 """
 
 import logging

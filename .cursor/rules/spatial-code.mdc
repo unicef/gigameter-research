@@ -1,0 +1,19 @@
+---
+description: Rules for spatial Python under src/. Read SpatialConfig and the blueprint before editing.
+alwaysApply: false
+globs: src/**/*.py
+---
+
+# Spatial code
+
+Read `SpatialConfig` and the blueprint before editing. Do not hard-code distances, weights, thresholds, or hour windows ([ADR 0004](../../docs/adr/0004-spatialconfig-single-source.md), [ADR 0011](../../docs/adr/0011-operational-hours.md)).
+
+Do not re-merge schools or alias identifiers inside analyzers ([ADR 0005](../../docs/adr/0005-canonical-frame-and-loader.md)). Pins come through `TelemetryLoader` ([ADR 0014](../../docs/adr/0014-pin-ownership.md)).
+
+Do not collapse the output tracks into one flag. More tracks may come.
+
+This research covers schools only while it is on 0.x ([ADR 0008](../../docs/adr/0008-scope-schools-only.md)).
+
+A required column may still be null. `device_id` is required and nullable ([ADR 0013](../../docs/adr/0013-canonical-frame-contract.md)).
+
+Fixtures stay synthetic ([ADR 0007](../../docs/adr/0007-data-handling-public-repo.md)).
