@@ -42,6 +42,7 @@ theme:
   favicon: giga_horizontal_bicolor.svg
 
 extra:
+  homepage: https://unicef.github.io/gigameter-research/
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/unicef/gigameter-research
