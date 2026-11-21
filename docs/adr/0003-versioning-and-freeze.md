@@ -14,7 +14,7 @@ Tag releases `git tag vX.Y.Z`. Publish the docs with `mike` as a minor version `
 
 A patch release does not get its own `mike` version. Docs stay on the minor, as in `v0.3` for the `v0.3.x` tags.
 
-The docs version is the Spatial Intelligence & Geofencing methodology version, titled `Geofencing vX.Y` in the version picker (`mike deploy --title`). The Outage and Routing pages are marked as unversioned drafts.
+The docs version is the Spatial Intelligence & Geofencing methodology version and appears as plain `vX.Y` in the version picker. The Outage and Routing pages are marked as unversioned drafts.
 
 Keep `pyproject.toml` `version` equal to the release tag.
 
