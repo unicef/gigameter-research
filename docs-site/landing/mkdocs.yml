@@ -25,4 +25,3 @@ nav:
       - Pin ownership: adr/0014-pin-ownership.md
       - Offline-row test timestamp: adr/0015-test-timestamp-offline-synced-rows.md
       - Per-track documentation sites: adr/0016-per-track-documentation-sites.md
-  - Data handling: adr/0007-data-handling-public-repo.md

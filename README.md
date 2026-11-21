@@ -103,8 +103,8 @@ Publish from the docs branch. Each command below commits on local `gh-pages` and
 ```bash
 scripts/docs.sh migrate-gh-pages
 
-mike deploy -f docs-site/geofencing/mkdocs.yml --deploy-prefix geofencing --update-aliases --title "v0.3" v0.3 latest
-mike set-default -f docs-site/geofencing/mkdocs.yml --deploy-prefix geofencing latest
+mike deploy -F docs-site/geofencing/mkdocs.yml --deploy-prefix geofencing --update-aliases --title "v0.3" v0.3 latest
+mike set-default -F docs-site/geofencing/mkdocs.yml --deploy-prefix geofencing latest
 
 scripts/docs.sh publish landing
 scripts/docs.sh publish outage
