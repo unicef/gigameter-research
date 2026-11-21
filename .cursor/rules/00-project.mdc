@@ -5,7 +5,7 @@ alwaysApply: true
 
 # GigaMeter research
 
-Methodology lives in `docs/`. Numbers live in `SpatialConfig` and on the Parameters page. Decisions live in `docs/adr/`. Do not put spatial weights, DBSCAN settings, or distance cutoffs in these rules.
+Methodology lives in the track docs under `docs-site/`. Numbers live in `SpatialConfig` and on the Parameters page. Decisions live in `docs/adr/` (the landing site). Do not put spatial weights, DBSCAN settings, or distance cutoffs in these rules.
 
 Plan first, and make no edits until the plan is approved. Ask clarifying questions. Change a parameter only when an edge case shows it fails.
 

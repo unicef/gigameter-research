@@ -90,13 +90,35 @@ Ledgers and audit outputs contain facility and device identifiers.
 
 ```bash
 pytest                              # test suite
-mkdocs serve                        # preview the documentation
-mkdocs build --strict               # check the documentation before a release
+scripts/docs.sh build-all           # strict build of every site into site/
+scripts/docs.sh serve-landing       # preview one site (also serve-geofencing, serve-outage, serve-routing)
 ```
 
-A test fails when a public class or function is missing from the API reference, so new code needs a docstring and an entry in `docs/api/`.
+A test fails when a public class or function is missing from the API reference, so new code needs a docstring and an entry in `docs/api/` (a symlink to `docs-site/geofencing/docs/api/`).
 
-**Versioning.** Methodology releases are tagged `vX.Y.Z` on `main`. The documentation is published per minor version with `mike`, for example `mike deploy --push --update-aliases v0.3 latest`, and earlier versions stay available from the version picker. The docs version is the Spatial Intelligence & Geofencing methodology version; the Outage and Routing tracks are unversioned drafts until their first release. Methodology changes and their reasons are recorded in the [Research Log](https://unicef.github.io/gigameter-research/latest/blueprint/research-log/).
+**Versioning.** The landing site is unversioned. Geofencing is published per minor version with `mike` under its own prefix. Outage and routing stay unversioned drafts until their first release. Every `mike` command includes `--deploy-prefix`. There must never be a `versions.json` at the site root. Do not use `mkdocs gh-deploy`; it would replace `gh-pages` and wipe the geofencing tree.
+
+Publish from the docs branch. Each command below commits on local `gh-pages` and prints the push. Push once, after the last commit. A rehearsal sets `DOCS_PAGES_BRANCH` to another local branch and skips the push.
+
+```bash
+scripts/docs.sh migrate-gh-pages
+
+mike deploy -f docs-site/geofencing/mkdocs.yml --deploy-prefix geofencing --update-aliases --title "v0.3" v0.3 latest
+mike set-default -f docs-site/geofencing/mkdocs.yml --deploy-prefix geofencing latest
+
+scripts/docs.sh publish landing
+scripts/docs.sh publish outage
+scripts/docs.sh publish routing
+scripts/docs.sh publish redirects
+
+git push origin gh-pages
+```
+
+`migrate-gh-pages` runs once. It moves `v0.2/` to `geofencing/v0.2/`, removes the root `v0.3/`, `latest/`, and `versions.json`, writes the legacy redirect stubs, and puts the landing build at the root. It keeps the v0.2 entry in `geofencing/versions.json` so the next `mike deploy` can add v0.3 without dropping v0.2. Later releases use `publish` for the landing site, outage, routing, and the redirect stubs. `publish` commits only when that site's files changed, so landing and the redirect stubs are unchanged on the first run after migrate. Geofencing versions stay on the `mike` commands above. `set-default` runs under `geofencing/`, so the site root stays the landing page.
+
+Track-prefixed tags (`geofencing-vX.Y.Z`, `outage-vX.Y.Z`, `routing-vX.Y.Z`) apply from the next release. Tags `v0.3.0`, `v0.3.1`, and `v0.3.2` stay as they are. `pyproject.toml` remains the package version.
+
+Links inside one site stay relative, so they remain on that version. Links that cross sites are root-absolute, for example `/gigameter-research/adr/0011-operational-hours/` and `/gigameter-research/geofencing/latest/blueprint/research-log/`. `scripts/redirect_legacy_docs.py` writes refresh stubs for the old `/v0.2/`, `/v0.3/`, and `/latest/` URLs. Methodology changes and their reasons are recorded in the [Research Log](https://unicef.github.io/gigameter-research/geofencing/latest/blueprint/research-log/).
 
 ## License
 

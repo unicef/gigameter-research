@@ -1,0 +1,55 @@
+INHERIT: ../base.yml
+
+site_url: https://unicef.github.io/gigameter-research/geofencing/
+docs_dir: docs
+edit_uri: edit/main/docs-site/geofencing/docs/
+
+extra:
+  version:
+    provider: mike
+    default: latest
+    alias: true
+
+plugins:
+  mike:
+    deploy_prefix: geofencing
+    canonical_version: latest
+  mkdocstrings:
+    handlers:
+      python:
+        paths: [.]
+        options:
+          docstring_style: google
+          docstring_options:
+            returns_multiple_items: false
+            returns_named_value: false
+          show_source: false
+          show_root_heading: true
+          heading_level: 2
+          members_order: source
+          filters: ["!^_"]
+          merge_init_into_class: true
+          show_root_full_path: false
+          show_signature_annotations: false
+          show_symbol_type_heading: true
+          show_symbol_type_toc: true
+
+nav:
+  - Spatial & Geofencing:
+      - Pillars:
+          - Mobility Trajectories: spatial/pillar-1-mobility.md
+          - Geolocation Quality: spatial/pillar-2-quality.md
+          - Govt Map Validation: spatial/pillar-3-validation.md
+          - Worked Examples: spatial/examples.md
+      - Blueprints:
+          - Spatial & Geofencing Blueprint: blueprint/technical_blueprint.md
+          - Methodology Parameters: blueprint/parameters.md
+          - Research Log: blueprint/research-log.md
+      - Python API Reference:
+          - Overview: api/index.md
+          - Data Loading: api/loading.md
+          - Configuration: api/config.md
+          - MobilityAnalyzer: api/mobility.md
+          - SpatialProfiler: api/profiler.md
+          - FacilityValidator: api/validator.md
+          - Helpers & Constants: api/helpers.md

@@ -1,0 +1,20 @@
+INHERIT: ../base.yml
+
+site_url: https://unicef.github.io/gigameter-research/routing/
+docs_dir: docs
+edit_uri: edit/main/docs-site/routing/docs/
+
+extra:
+  version:
+    provider: mike
+    default: latest
+
+plugins:
+  mike:
+    deploy_prefix: routing
+    canonical_version: latest
+
+nav:
+  - Diagnostics & Routing:
+      - Pillars:
+          - Traceroutes & BBR: diagnostics/routing.md
