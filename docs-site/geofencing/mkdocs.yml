@@ -35,6 +35,7 @@ plugins:
           show_symbol_type_toc: true
 
 nav:
+  - Overview: index.md
   - Spatial & Geofencing:
       - Pillars:
           - Mobility Trajectories: spatial/pillar-1-mobility.md

@@ -15,6 +15,7 @@ plugins:
     canonical_version: latest
 
 nav:
+  - Overview: index.md
   - Diagnostics & Routing:
       - Pillars:
           - Traceroutes & BBR: diagnostics/routing.md
